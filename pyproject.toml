@@ -1,0 +1,45 @@
+[project]
+name = "tdd-orchestrator"
+version = "1.0.0"
+description = "Parallel TDD task execution with circuit breakers"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "click>=8.0",
+    "httpx>=0.28.1",
+    "psutil>=5.9.0",
+]
+
+[project.optional-dependencies]
+sdk = ["claude-agent-sdk>=0.1.19"]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "mypy>=1.18.2",
+    "ruff>=0.13.1",
+]
+
+[project.scripts]
+tdd-orchestrator = "tdd_orchestrator.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tdd_orchestrator"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
