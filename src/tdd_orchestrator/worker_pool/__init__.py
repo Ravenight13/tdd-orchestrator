@@ -7,17 +7,22 @@ from __future__ import annotations
 
 from .circuit_breakers import RedFixAttemptTracker, StaticReviewCircuitBreaker
 from .config import (
+    ClaudeAgentOptions,
     DEFAULT_GREEN_RETRY_TIMEOUT_SECONDS,
+    HAS_AGENT_SDK,
     MAX_TEST_OUTPUT_SIZE,
     PoolResult,
     WorkerConfig,
     WorkerStats,
+    sdk_query,
 )
 from .pool import WorkerPool
 from .worker import Worker
 
 __all__ = [
+    "ClaudeAgentOptions",
     "DEFAULT_GREEN_RETRY_TIMEOUT_SECONDS",
+    "HAS_AGENT_SDK",
     "MAX_TEST_OUTPUT_SIZE",
     "PoolResult",
     "RedFixAttemptTracker",
@@ -26,4 +31,5 @@ __all__ = [
     "WorkerConfig",
     "WorkerPool",
     "WorkerStats",
+    "sdk_query",
 ]

@@ -36,7 +36,7 @@ class TestSDKInitialization:
             git = MagicMock()
             config = WorkerConfig()
 
-            with patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", False):
+            with patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", False):
                 worker = Worker(
                     worker_id=1,
                     db=db,
@@ -74,7 +74,7 @@ class TestSDKInitialization:
             task = await db.get_task_by_key("TDD-01")
             assert task is not None
 
-            with patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", False):
+            with patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", False):
                 worker = Worker(
                     worker_id=1,
                     db=db,
@@ -165,9 +165,9 @@ class TestSDKRateLimiting:
                 raise asyncio.TimeoutError("SDK timeout")
 
             with (
-                patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                patch("tdd_orchestrator.worker_pool.sdk_query", timeout_query),
-                patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", MagicMock),
+                patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                patch("tdd_orchestrator.worker_pool.worker.sdk_query", timeout_query),
+                patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", MagicMock),
             ):
                 from tdd_orchestrator.models import Stage
 
@@ -368,9 +368,9 @@ class TestBudgetEnforcement:
 
             # Next stage should fail due to budget
             with (
-                patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                patch("tdd_orchestrator.worker_pool.sdk_query", AsyncMock()),
-                patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", MagicMock),
+                patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                patch("tdd_orchestrator.worker_pool.worker.sdk_query", AsyncMock()),
+                patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", MagicMock),
             ):
                 from tdd_orchestrator.models import Stage
 
@@ -414,9 +414,9 @@ class TestBudgetEnforcement:
                 raise RuntimeError("SDK failure")
 
             with (
-                patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                patch("tdd_orchestrator.worker_pool.sdk_query", failing_query),
-                patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", MagicMock),
+                patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                patch("tdd_orchestrator.worker_pool.worker.sdk_query", failing_query),
+                patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", MagicMock),
             ):
                 from tdd_orchestrator.models import Stage
 
@@ -442,9 +442,9 @@ class TestSDKIntegrationErrors:
 
             # Simulate SDK not installed
             with (
-                patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", False),
-                patch("tdd_orchestrator.worker_pool.sdk_query", None),
-                patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", None),
+                patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", False),
+                patch("tdd_orchestrator.worker_pool.worker.sdk_query", None),
+                patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", None),
             ):
                 worker = Worker(
                     worker_id=1,
@@ -494,9 +494,9 @@ class TestSDKIntegrationErrors:
             )
 
             with (
-                patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", False),
-                patch("tdd_orchestrator.worker_pool.sdk_query", None),
-                patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", None),
+                patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", False),
+                patch("tdd_orchestrator.worker_pool.worker.sdk_query", None),
+                patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", None),
             ):
                 from tdd_orchestrator.models import Stage
 
@@ -544,7 +544,7 @@ class TestSDKIntegrationErrors:
 
             # Mock SDK failure
             with (
-                patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", False),
+                patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", False),
                 patch.object(worker, "_run_tdd_pipeline", AsyncMock(return_value=False)),
             ):
                 result = await worker.process_task(task)

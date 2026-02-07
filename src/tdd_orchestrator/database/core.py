@@ -15,7 +15,7 @@ from .tasks import TaskMixin
 from .workers import WorkerMixin
 
 
-class OrchestratorDB(TaskMixin, WorkerMixin, RunsMixin, ConnectionMixin):
+class OrchestratorDB(ConnectionMixin, TaskMixin, WorkerMixin, RunsMixin):
     """Async SQLite database for TDD task orchestration.
 
     This class manages all database operations for the orchestrator,

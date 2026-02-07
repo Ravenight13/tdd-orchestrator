@@ -120,6 +120,6 @@ def mock_agent_sdk(monkeypatch):
     async def mock_query(prompt, options=None):
         yield MagicMock(text="Mocked LLM response")
 
-    monkeypatch.setattr("worker_pool.sdk_query", mock_query, raising=False)
-    monkeypatch.setattr("worker_pool.HAS_AGENT_SDK", True, raising=False)
-    monkeypatch.setattr("worker_pool.ClaudeAgentOptions", MagicMock, raising=False)
+    monkeypatch.setattr("tdd_orchestrator.worker_pool.worker.sdk_query", mock_query, raising=False)
+    monkeypatch.setattr("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True, raising=False)
+    monkeypatch.setattr("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", MagicMock, raising=False)

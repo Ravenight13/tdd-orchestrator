@@ -15,8 +15,8 @@ import aiosqlite
 
 logger = logging.getLogger(__name__)
 
-# Path to schema file relative to the package parent (src/tdd_orchestrator/)
-SCHEMA_PATH = Path(__file__).parent.parent / "schema.sql"
+# Path to schema file: database/connection.py -> database/ -> tdd_orchestrator/ -> src/ -> project root
+SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent.parent / "schema" / "schema.sql"
 
 # Configuration bounds for numeric values
 CONFIG_BOUNDS: dict[str, tuple[int, int]] = {

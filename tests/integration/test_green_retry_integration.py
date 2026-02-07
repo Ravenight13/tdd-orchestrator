@@ -99,10 +99,10 @@ class TestGreenRetryIntegration:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                    patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_query_gen),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_query_gen),
                     patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
                 ):
@@ -178,10 +178,10 @@ class TestGreenRetryIntegration:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                    patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_query_gen),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_query_gen),
                     patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
                 ):
@@ -252,10 +252,10 @@ class TestGreenRetryIntegration:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                    patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_query_gen),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_query_gen),
                     patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
                 ):
@@ -339,10 +339,10 @@ class TestGreenRetryIntegration:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                    patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_query_gen),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_query_gen),
                     patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
                 ):
@@ -428,10 +428,10 @@ class TestGreenRetryIntegration:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-                    patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_query_gen),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_query_gen),
                     patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
                 ):

@@ -57,9 +57,9 @@ class TestSingleTaskCompletion:
 
         # Patch Agent SDK
         with (
-            patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-            patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_sdk_success),
-            patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", return_value=MagicMock()),
+            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_sdk_success),
+            patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             # Start worker
             await worker.start()
@@ -174,9 +174,9 @@ class TestParallelTaskExecution:
 
         # Patch Agent SDK for both workers
         with (
-            patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-            patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_sdk_success),
-            patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", return_value=MagicMock()),
+            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_sdk_success),
+            patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             # Start workers
             await worker1.start()
@@ -271,12 +271,12 @@ class TestFailureRecovery:
         worker.verifier = MockVerifier()
 
         with (
-            patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
             patch(
-                "tdd_orchestrator.worker_pool.sdk_query",
+                "tdd_orchestrator.worker_pool.worker.sdk_query",
                 side_effect=mock_sdk_failure_then_success,
             ),
-            patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", return_value=MagicMock()),
+            patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             await worker.start()
 
@@ -378,9 +378,9 @@ class TestBudgetExhaustion:
         worker.verifier = mock_verifier_all_pass
 
         with (
-            patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-            patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_sdk_success),
-            patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", return_value=MagicMock()),
+            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_sdk_success),
+            patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             await worker.start()
 

@@ -26,13 +26,7 @@ if TYPE_CHECKING:
 @pytest.fixture
 def schema_path() -> Path:
     """Get path to schema.sql."""
-    return (
-        Path(__file__).parent.parent.parent.parent
-        / "src"
-        / "agents"
-        / "orchestrator"
-        / "schema.sql"
-    )
+    return Path(__file__).resolve().parent.parent.parent / "schema" / "schema.sql"
 
 
 @pytest_asyncio.fixture

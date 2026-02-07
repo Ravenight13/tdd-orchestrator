@@ -64,14 +64,14 @@ class TestGreenRetryEdgeCases:
                     return attempt_count[0] * 15.0
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
                     patch(
-                        "tdd_orchestrator.worker_pool.sdk_query",
+                        "tdd_orchestrator.worker_pool.worker.sdk_query",
                         side_effect=mock_query_gen,
                     ),
                 ):
                     with patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ):
                         # Patch the event loop time method
@@ -136,14 +136,14 @@ class TestGreenRetryEdgeCases:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
                     patch(
-                        "tdd_orchestrator.worker_pool.sdk_query",
+                        "tdd_orchestrator.worker_pool.worker.sdk_query",
                         side_effect=mock_query_gen,
                     ),
                 ):
                     with patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ):
                         task = await db.get_task_by_key("TDD-EMPTY")
@@ -261,14 +261,14 @@ class TestGreenRetryEdgeCases:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
                     patch(
-                        "tdd_orchestrator.worker_pool.sdk_query",
+                        "tdd_orchestrator.worker_pool.worker.sdk_query",
                         side_effect=mock_query_gen,
                     ),
                 ):
                     with patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ):
                         task = await db.get_task_by_key("TDD-INVALID-CFG")
@@ -316,14 +316,14 @@ class TestGreenRetryEdgeCases:
                     yield mock_message
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
                     patch(
-                        "tdd_orchestrator.worker_pool.sdk_query",
+                        "tdd_orchestrator.worker_pool.worker.sdk_query",
                         side_effect=mock_query_gen,
                     ),
                 ):
                     with patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ):
                         task = await db.get_task_by_key("TDD-BOUNDS")
@@ -381,15 +381,15 @@ class TestGreenRetryEdgeCases:
                     await original_sleep(delay)
 
                 with (
-                    patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
+                    patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
                     patch(
-                        "tdd_orchestrator.worker_pool.sdk_query",
+                        "tdd_orchestrator.worker_pool.worker.sdk_query",
                         side_effect=mock_query_gen,
                     ),
                     patch("asyncio.sleep", side_effect=tracked_sleep),
                 ):
                     with patch(
-                        "tdd_orchestrator.worker_pool.ClaudeAgentOptions",
+                        "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ):
                         task = await db.get_task_by_key("TDD-ZERO-DELAY")

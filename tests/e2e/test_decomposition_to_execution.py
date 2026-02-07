@@ -183,9 +183,9 @@ class TestDecompositionToExecution:
 
         # Patch Agent SDK
         with (
-            patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-            patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_sdk_success),
-            patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", return_value=MagicMock()),
+            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_sdk_success),
+            patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             await worker.start()
 
@@ -480,9 +480,9 @@ class TestDecompositionToExecution:
         worker2.verifier = mock_verifier_all_pass
 
         with (
-            patch("tdd_orchestrator.worker_pool.HAS_AGENT_SDK", True),
-            patch("tdd_orchestrator.worker_pool.sdk_query", side_effect=mock_sdk_success),
-            patch("tdd_orchestrator.worker_pool.ClaudeAgentOptions", return_value=MagicMock()),
+            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.worker.sdk_query", side_effect=mock_sdk_success),
+            patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             await worker1.start()
             await worker2.start()
