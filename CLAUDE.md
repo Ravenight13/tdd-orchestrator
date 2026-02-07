@@ -20,6 +20,43 @@ TDD Orchestrator is a parallel task execution engine for Test-Driven Development
 | Type checking | mypy | strict=true |
 | SDK | claude-agent-sdk | Optional dependency, graceful degradation |
 
+## File Structure
+
+```
+src/tdd_orchestrator/
+├── cli.py                  # Click CLI entry point
+├── models.py               # Domain models
+├── database.py             # SQLite persistence (aiosqlite)
+├── worker_pool.py          # Parallel worker management
+├── circuit_breaker.py      # 3-level circuit breakers
+├── circuit_breaker_config.py
+├── decomposition/          # 4-pass LLM decomposition pipeline
+│   ├── decomposer.py       #   Pipeline orchestrator
+│   ├── generator.py        #   LLM prompt generation
+│   ├── parser.py           #   Response parsing
+│   ├── validators.py       #   Output validation
+│   └── ...
+├── decompose_spec.py       # Spec decomposition entry point
+├── prompt_builder.py       # LLM prompt construction
+├── ast_checker.py          # AST-based code analysis
+├── code_verifier.py        # Code verification
+├── complexity_detector.py  # Complexity analysis
+├── health.py               # Health checks
+├── hooks.py                # Event hooks
+├── mcp_tools.py            # MCP tool integration
+├── metrics.py              # Prometheus-style metrics
+├── notifications.py        # Slack notifications
+├── git_coordinator.py      # Git operations
+├── git_stash_guard.py      # Stash safety
+├── merge_coordinator.py    # Branch merging
+├── progress_writer.py      # Progress output
+└── task_loader.py          # Task file loading
+tests/
+├── unit/                   # Fast, in-memory DB tests
+├── integration/            # Full system tests
+└── e2e/                    # End-to-end tests
+```
+
 ## Essential Commands
 
 ```bash
@@ -33,6 +70,22 @@ tdd-orchestrator health             # Check health
 tdd-orchestrator run -p -w 2        # Run with 2 parallel workers
 ```
 
+## Environment Variables
+
+```bash
+# Optional — SDK integration
+ANTHROPIC_API_KEY=               # For Claude SDK workers
+
+# Optional — Notifications
+SLACK_WEBHOOK_URL=               # Slack webhook for alerts
+
+# Optional — Tuning
+TDD_MAX_WORKERS=3                # Worker pool size
+TDD_MAX_INVOCATIONS=100          # Max task invocations
+TDD_CIRCUIT_STAGE_MAX_FAILURES=5
+TDD_CIRCUIT_WORKER_MAX_CONSECUTIVE=5
+```
+
 ## Quick Reference
 
 - **TDD Pipeline**: RED → RED_FIX → GREEN → VERIFY → (FIX → RE_VERIFY)
@@ -42,6 +95,27 @@ tdd-orchestrator run -p -w 2        # Run with 2 parallel workers
 - **Model Selection**: RED/decomposition always Opus. Low=Haiku, Medium=Sonnet, High=Opus. GREEN retries escalate.
 - **SDK is optional**: Always guard imports with try/except. Never assume it's installed.
 
+## Code Organization (Mission Critical)
+
+- Many small files over few large files
+- 200-400 lines typical, **800 absolute max** per file
+- High cohesion, low coupling — each module owns one responsibility
+- Organize by feature/domain, not by type
+- When a file grows past 400 lines, proactively split it before it hits the limit
+- When adding new functionality, create a new module rather than appending to an existing one
+
+**Splitting signals**: multiple classes, unrelated functions grouped together,
+file requires scrolling to understand, imports span many unrelated domains.
+
+## Testing Strategy
+
+- **Unit tests** (`tests/unit/`): Fast, in-memory SQLite, no external deps
+- **Integration tests** (`tests/integration/`): Full system, real DB
+- **E2E tests** (`tests/e2e/`): End-to-end workflow validation
+- Write tests first (TDD) — RED test before GREEN implementation
+- All async tests use `asyncio_mode = "auto"` (no decorator needed)
+- Coverage target: 80%+ on core modules
+
 ## Rules
 
 @.claude/rules/security.md
@@ -49,6 +123,7 @@ tdd-orchestrator run -p -w 2        # Run with 2 parallel workers
 
 ## Non-Negotiable Rules
 
+- **NEVER** let a file exceed 800 lines — split by responsibility before reaching the limit
 - **NEVER** use f-strings or string formatting for SQL queries
 - **NEVER** use `shell=True` in subprocess calls
 - **NEVER** hardcode API keys or credentials
