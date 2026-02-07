@@ -1,0 +1,609 @@
+TDD ORCHESTRATOR - PHASE 1: REST API LAYER
+===========================================
+
+Wrap the existing async TDD orchestration engine with a FastAPI REST API
+and Server-Sent Events (SSE) for real-time event streaming. The API layer
+is an optional dependency (`pip install tdd-orchestrator[api]`), following
+the same pattern as the Claude Agent SDK optional integration.
+
+The existing engine has 324+ passing tests, mypy strict clean, ruff clean.
+This spec adds ~18 new files and ~2,500 lines of production code.
+
+
+FUNCTIONAL REQUIREMENTS
+=======================
+
+FR-1: Pydantic API Models
+  Pydantic v2 response and request models for all API endpoints.
+  16 response models and 3 request models. Models use `model_validate()`
+  with `@field_validator(mode="before")` for JSON-encoded DB columns
+  (depends_on, acceptance_criteria, module_exports). No explicit converter
+  functions -- validators are co-located with field definitions.
+  Models use `ConfigDict(from_attributes=True)` for direct row mapping.
+
+  FR-1.1: Response Models
+    TaskResponse, TaskDetailResponse, TaskListResponse, AttemptResponse,
+    WorkerResponse, WorkerListResponse, CircuitBreakerResponse,
+    CircuitBreakerListResponse, HealthResponse, RunResponse, RunListResponse,
+    ProgressResponse, StatsResponse, ErrorResponse, SSEEventData.
+
+  FR-1.2: Request Models
+    TaskFilterParams (query params for task listing with pagination),
+    TaskRetryRequest (reset blocked task), CircuitResetRequest (reset circuit).
+
+  FR-1.3: JSON Field Validators
+    @field_validator("depends_on", mode="before") parses JSON strings to lists.
+    Same pattern for acceptance_criteria and module_exports fields.
+
+FR-2: Database Query Additions
+  New read-only query methods on existing mixin classes. No schema changes.
+  All queries use existing tables and views. Parameterized SQL only.
+
+  FR-2.1: TaskMixin Additions
+    get_tasks_by_status(status) -> list[dict]
+    get_tasks_filtered(*, status, phase, complexity, limit, offset) -> tuple[list, int]
+    Filtered query builds WHERE clauses from hardcoded column names with ? params.
+
+  FR-2.2: RunsMixin Additions
+    get_execution_runs(*, status, limit) -> list[dict]
+    get_current_run() -> dict | None
+
+  FR-2.3: WorkerMixin Additions
+    get_all_workers() -> list[dict] via v_worker_stats view.
+
+FR-3: SSE Event Broadcasting
+  Server-Sent Events broadcaster for real-time event push to dashboard clients.
+  Pure asyncio implementation with no FastAPI dependency. Fan-out to multiple
+  subscribers via asyncio.Queue per subscriber.
+
+  FR-3.1: SSEEvent Dataclass
+    event_type (str), data (dict), id (str|None), timestamp (datetime).
+    format() method returns SSE wire protocol string.
+
+  FR-3.2: SSEBroadcaster Class
+    subscribe() -> AsyncGenerator[SSEEvent, None]
+    publish(event_type, data) -> None (non-blocking fan-out)
+    shutdown() -> None (sends None sentinel to all queues)
+    subscriber_count property.
+    Thread-safe via asyncio.Lock. Slow consumers dropped on QueueFull.
+
+  FR-3.3: Event Types
+    task_status_changed, task_claimed, task_released, worker_heartbeat,
+    circuit_state_changed, run_started, run_completed, system_health_changed.
+
+FR-4: FastAPI Dependency Injection
+  Injectable singletons for DB and broadcaster. Manages lifecycle via
+  app lifespan context manager.
+
+  FR-4.1: Dependencies
+    get_db_dep() -> AsyncGenerator[OrchestratorDB, None]
+    get_broadcaster_dep() -> SSEBroadcaster
+    init_dependencies(db_path) and shutdown_dependencies() for lifecycle.
+
+FR-5: Error Handling and CORS Middleware
+  Global exception handlers and CORS configuration.
+
+  FR-5.1: Error Handlers
+    ValueError -> 400, LookupError -> 404, Exception -> 500.
+    All return structured ErrorResponse JSON.
+
+  FR-5.2: CORS Configuration
+    Configurable origins via TDD_CORS_ORIGINS env var.
+    Defaults: ["http://localhost:5173", "http://localhost:3000"] for Vite/React.
+
+FR-6: Health Endpoints
+  Health check, readiness probe, and liveness probe.
+
+  FR-6.1: Endpoints
+    GET /health -> HealthResponse (circuit breaker summary via get_circuit_health())
+    GET /health/ready -> {ready: bool} (DB connected check)
+    GET /health/live -> {status: "ok"} (always 200)
+
+FR-7: Task Endpoints
+  Task CRUD and listing. Richest route file.
+
+  FR-7.1: Endpoints
+    GET /tasks -> TaskListResponse (filter by status, phase, complexity, paginated)
+    GET /tasks/stats -> StatsResponse (status summary counts)
+    GET /tasks/progress -> ProgressResponse (completion percentage)
+    GET /tasks/{task_key} -> TaskDetailResponse (detail + attempt history)
+    POST /tasks/{task_key}/retry -> TaskResponse (reset blocked task to pending)
+
+  FR-7.2: Row-to-Model Conversion
+    Uses TaskResponse.model_validate(row) with field validators.
+    No explicit converter functions.
+
+FR-8: Worker Endpoints
+  Worker status and health.
+
+  FR-8.1: Endpoints
+    GET /workers -> WorkerListResponse (all workers with stats)
+    GET /workers/{id} -> WorkerResponse (single worker detail)
+    GET /workers/stale -> WorkerListResponse (heartbeat > 10 min)
+
+FR-9: Circuit Breaker Endpoints
+  Circuit breaker management with reset mutation.
+
+  FR-9.1: Endpoints
+    GET /circuits -> CircuitBreakerListResponse (filter by level, state)
+    GET /circuits/{id} -> CircuitBreakerResponse (single circuit)
+    POST /circuits/{id}/reset -> CircuitBreakerResponse (reset to closed)
+    GET /circuits/health -> HealthResponse (circuit health summary)
+
+FR-10: Run Endpoints
+  Execution run history.
+
+  FR-10.1: Endpoints
+    GET /runs -> RunListResponse (most recent first, filter by status)
+    GET /runs/{run_id} -> RunResponse (run detail with invocation count)
+    GET /runs/current -> RunResponse | None (active run)
+
+FR-11: Metrics Endpoint
+  Prometheus metrics export.
+
+  FR-11.1: Endpoints
+    GET /metrics -> PlainTextResponse (Prometheus exposition format)
+    Delegates to existing get_metrics_collector().export_prometheus().
+
+FR-12: App Factory
+  FastAPI application factory with lifespan management.
+
+  FR-12.1: create_app Function
+    create_app(db_path, cors_origins) -> FastAPI
+    Configures middleware, registers routes, sets up lifespan.
+    SSE /events endpoint registered separately for streaming.
+
+  FR-12.2: Lifespan
+    Startup: init_dependencies(db_path)
+    Shutdown: shutdown_dependencies()
+
+FR-13: CLI Serve Command
+  Click command to start the API server via uvicorn.
+
+  FR-13.1: Command
+    tdd-orchestrator serve [--host] [--port] [--db] [--reload] [--log-level]
+    Default host: 127.0.0.1 (security: no auth in Phase 1)
+    Default port: 8420 (avoids conflict with common dev ports)
+    Lazy import with try/except ImportError for optional dependency.
+
+FR-14: DB-Level Event Observer
+  Database-level callback pattern for SSE event publishing.
+  Replaces hooks.py-based approach (hooks are for SDK tool interception only).
+
+  FR-14.1: TaskMixin Callbacks
+    _callbacks: list[Callable] on TaskMixin.
+    Dispatch after commit() in update_task_status().
+    ~8 lines, follows MetricsCollector.register_callback() pattern.
+
+  FR-14.2: Broadcaster Wiring
+    hooks.py stores broadcaster reference via set_sse_broadcaster().
+    API startup registers broadcaster as callback on DB mixin.
+
+  FR-14.3: Circuit Breaker SSE Bridge
+    api/sse_bridge.py adapts MetricsCollector callbacks to SSE events.
+    Phase 1 only -- migrate to dedicated EventBus in Phase 2.
+
+
+NON-FUNCTIONAL REQUIREMENTS
+============================
+
+NFR-1: Optional Dependency
+  FastAPI and all API dependencies are optional (`pip install tdd-orchestrator[api]`).
+  Core engine works without them. Import guards with try/except ImportError.
+  CLI serve command shows helpful install message if deps missing.
+
+NFR-2: mypy Strict Compliance
+  All new code passes `mypy src/ --strict`. No `# type: ignore` except for
+  known patterns (import-not-found for optional deps).
+
+NFR-3: Ruff Clean
+  All new code passes `ruff check src/`. Line length 100, target py311.
+
+NFR-4: File Size Limits
+  No file exceeds 400 lines (split threshold). Absolute max 800 lines.
+
+NFR-5: Parameterized SQL
+  All database queries use ? placeholders. No f-strings for SQL.
+  Dynamic WHERE clauses built from hardcoded column names only.
+
+NFR-6: Test Isolation
+  Each test creates its own app via create_app(db_path=":memory:").
+  No shared state between tests. ~5ms schema init per test is acceptable.
+
+NFR-7: Security
+  Default bind 127.0.0.1 (no network exposure without explicit opt-in).
+  No credentials in code. CORS configurable via environment variable.
+
+
+ACCEPTANCE CRITERIA
+===================
+
+AC-1: Server Startup
+  GIVEN the API dependencies are installed
+  WHEN running `tdd-orchestrator serve`
+  THEN the server starts on 127.0.0.1:8420 and /health returns 200
+
+AC-2: Task Listing
+  GIVEN tasks exist in the database
+  WHEN GET /tasks?status=pending&limit=10
+  THEN response contains filtered, paginated TaskListResponse with correct total
+
+AC-3: SSE Event Delivery
+  GIVEN a client is connected to /events
+  WHEN a task status changes via API retry endpoint
+  THEN the SSE client receives a task_status_changed event
+
+AC-4: Circuit Reset
+  GIVEN a circuit breaker is in OPEN state
+  WHEN POST /circuits/{id}/reset
+  THEN the circuit transitions to CLOSED and SSE event is published
+
+AC-5: Optional Dependency Degradation
+  GIVEN tdd-orchestrator is installed WITHOUT [api] extra
+  WHEN running `tdd-orchestrator serve`
+  THEN a helpful error message is shown suggesting `pip install tdd-orchestrator[api]`
+
+AC-6: Existing Tests Unbroken
+  GIVEN the API layer is fully implemented
+  WHEN running the full test suite
+  THEN all 324+ existing tests still pass alongside new API tests
+
+AC-7: Prometheus Metrics
+  GIVEN the server is running
+  WHEN GET /metrics
+  THEN Prometheus exposition format text is returned
+
+AC-8: OpenAPI Spec
+  GIVEN the server is running
+  WHEN GET /openapi.json
+  THEN a valid OpenAPI 3.x spec is returned with all endpoints documented
+
+
+### Phase 0: Foundation Models and Data Layer
+
+**TDD Cycle 1: Pydantic Response and Request Models**
+- TaskResponse, TaskDetailResponse, TaskListResponse
+- AttemptResponse, WorkerResponse, WorkerListResponse
+- CircuitBreakerResponse, CircuitBreakerListResponse
+- HealthResponse, RunResponse, RunListResponse
+- ProgressResponse, StatsResponse, ErrorResponse, SSEEventData
+- TaskFilterParams, TaskRetryRequest, CircuitResetRequest
+- @field_validator for JSON-encoded columns (depends_on, acceptance_criteria)
+- ConfigDict(from_attributes=True) on all response models
+Tests: 15
+Module Hint: src/tdd_orchestrator/api/models/
+
+**TDD Cycle 2: Database Query Method Additions**
+- TaskMixin.get_tasks_by_status(status)
+- TaskMixin.get_tasks_filtered(status, phase, complexity, limit, offset)
+- RunsMixin.get_execution_runs(status, limit)
+- RunsMixin.get_current_run()
+- WorkerMixin.get_all_workers() via v_worker_stats view
+- All parameterized SQL with ? placeholders
+Tests: 12
+Module Hint: src/tdd_orchestrator/database/
+
+**TDD Cycle 3: SSE Event Broadcaster**
+- SSEEvent dataclass with format() for wire protocol
+- SSEBroadcaster with subscribe/publish/shutdown
+- asyncio.Queue per subscriber with fan-out
+- Slow consumer detection and cleanup on QueueFull
+- Thread-safe via asyncio.Lock
+- No FastAPI imports -- pure asyncio
+Tests: 10
+Module Hint: src/tdd_orchestrator/api/
+
+
+### Phase 1: Middleware and Injection Layer
+
+**TDD Cycle 4: FastAPI Dependency Injection**
+- get_db_dep() yields OrchestratorDB instance
+- get_broadcaster_dep() returns SSEBroadcaster singleton
+- init_dependencies(db_path) for startup
+- shutdown_dependencies() for cleanup
+- Module-level singletons set during app lifespan
+Tests: 8
+Module Hint: src/tdd_orchestrator/api/
+Dependencies: Cycle 1, Cycle 3
+
+**TDD Cycle 5: Error Handling and CORS Middleware**
+- register_error_handlers(app) function
+- ValueError -> 400 JSONResponse with ErrorResponse
+- LookupError -> 404 JSONResponse with ErrorResponse
+- Exception -> 500 JSONResponse with ErrorResponse (sanitized)
+- configure_cors(app) with TDD_CORS_ORIGINS env var
+- Default origins: localhost:5173, localhost:3000
+Tests: 8
+Module Hint: src/tdd_orchestrator/api/middleware/
+Dependencies: Cycle 1
+
+
+### Phase 2: Route Handlers
+
+**TDD Cycle 6: Health and Metrics Routes**
+- GET /health -> HealthResponse via get_circuit_health()
+- GET /health/ready -> DB connectivity check
+- GET /health/live -> always 200
+- GET /metrics -> Prometheus text via get_metrics_collector()
+Tests: 11
+Module Hint: src/tdd_orchestrator/api/routes/
+Dependencies: Cycle 1, Cycle 4, Cycle 5
+
+**TDD Cycle 7: Task Routes**
+- GET /tasks with status/phase/complexity filters and pagination
+- GET /tasks/stats -> StatsResponse
+- GET /tasks/progress -> ProgressResponse
+- GET /tasks/{task_key} -> TaskDetailResponse with attempts
+- POST /tasks/{task_key}/retry -> reset to pending, publish SSE event
+- Uses TaskResponse.model_validate(row) -- no converter functions
+Tests: 20
+Module Hint: src/tdd_orchestrator/api/routes/
+Dependencies: Cycle 1, Cycle 2, Cycle 3, Cycle 4, Cycle 5
+
+**TDD Cycle 8: Worker, Circuit, and Run Routes**
+- GET /workers, GET /workers/{id}, GET /workers/stale
+- GET /circuits with level/state filters
+- GET /circuits/{id}, POST /circuits/{id}/reset
+- GET /circuits/health
+- GET /runs with status filter, GET /runs/{run_id}, GET /runs/current
+Tests: 28
+Module Hint: src/tdd_orchestrator/api/routes/
+Dependencies: Cycle 1, Cycle 2, Cycle 3, Cycle 4, Cycle 5
+
+
+### Phase 3: Application Assembly
+
+**TDD Cycle 9: App Factory and Route Registration**
+- create_app(db_path, cors_origins) -> FastAPI
+- Lifespan context manager for startup/shutdown
+- register_routes(app) wires all routers with prefixes
+- SSE /events endpoint with EventSourceResponse
+- OpenAPI metadata (title, description, version)
+Tests: 8
+Module Hint: src/tdd_orchestrator/api/
+Dependencies: Cycle 4, Cycle 5, Cycle 6, Cycle 7, Cycle 8
+
+**TDD Cycle 10: CLI Serve Command and Uvicorn Runner**
+- serve.py run_server(host, port, db_path, reload, log_level)
+- Default host: 127.0.0.1, default port: 8420
+- Click command on cli group with options
+- try/except ImportError with helpful install message
+- Graceful shutdown via uvicorn SIGINT/SIGTERM handling
+Tests: 5
+Module Hint: src/tdd_orchestrator/api/
+Dependencies: Cycle 9
+
+
+### Phase 4: Event Integration
+
+**TDD Cycle 11: DB Observer Pattern and SSE Wiring**
+- Add _callbacks list to TaskMixin for status change events
+- Dispatch callbacks after commit in update_task_status()
+- hooks.py: set_sse_broadcaster() and get_sse_broadcaster()
+- api/sse_bridge.py: wire MetricsCollector callbacks to SSE for circuits
+- API startup registers broadcaster on DB callbacks
+Tests: 8
+Module Hint: src/tdd_orchestrator/api/
+Dependencies: Cycle 3, Cycle 9
+
+**TDD Cycle 12: Full Stack Integration Tests**
+- App lifecycle test (startup, serve requests, shutdown)
+- SSE integration: publish event, verify client receives it
+- Task CRUD flow: create tasks, list, filter, retry
+- Circuit reset flow with SSE event verification
+- Regression: all 324+ existing tests still pass
+Tests: 10
+Module Hint: tests/integration/api/
+Dependencies: Cycle 9, Cycle 10, Cycle 11
+
+
+MODULE STRUCTURE
+----------------
+src/tdd_orchestrator/api/
+  __init__.py                    # Package init, exports create_app
+  app.py                         # FastAPI application factory
+  serve.py                       # Uvicorn runner wrapper
+  dependencies.py                # Dependency injection (get_db_dep, get_broadcaster_dep)
+  sse.py                         # SSE broadcaster (pure asyncio)
+  sse_bridge.py                  # MetricsCollector -> SSE adapter for circuits
+  models/
+    __init__.py                  # Re-exports all models
+    responses.py                 # Pydantic v2 response schemas (16 models)
+    requests.py                  # Pydantic v2 request schemas (3 models)
+  middleware/
+    __init__.py                  # Package init
+    error_handler.py             # Global exception handlers
+    cors.py                      # CORS configuration
+  routes/
+    __init__.py                  # register_routes(app) function
+    health.py                    # /health, /health/ready, /health/live
+    tasks.py                     # /tasks CRUD and listing
+    workers.py                   # /workers status
+    circuits.py                  # /circuits management
+    runs.py                      # /runs history
+    metrics.py                   # /metrics Prometheus export
+
+tests/unit/api/
+  __init__.py
+  test_models.py                 # Pydantic model validation tests
+  test_sse.py                    # SSEBroadcaster unit tests
+  test_error_handler.py          # Error handler middleware tests
+  test_routes_health.py          # Health endpoint tests
+  test_routes_tasks.py           # Task endpoint tests
+  test_routes_workers.py         # Worker endpoint tests
+  test_routes_circuits.py        # Circuit endpoint tests
+  test_routes_runs.py            # Run endpoint tests
+  test_routes_metrics.py         # Metrics endpoint tests
+  test_db_additions.py           # New DB method tests
+
+tests/integration/api/
+  __init__.py
+  test_app_lifecycle.py          # App startup/shutdown tests
+  test_sse_integration.py        # SSE with real events
+  test_full_api.py               # Full endpoint integration
+
+
+MODULE API SPECIFICATION
+========================
+src/tdd_orchestrator/api/__init__.py:
+  exports:
+    - create_app (function): FastAPI application factory
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api import create_app
+
+src/tdd_orchestrator/api/app.py:
+  exports:
+    - create_app (function): Create and configure FastAPI application
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.app import create_app
+
+src/tdd_orchestrator/api/serve.py:
+  exports:
+    - run_server (function): Start uvicorn with configuration
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.serve import run_server
+
+src/tdd_orchestrator/api/sse.py:
+  exports:
+    - SSEEvent (dataclass): Single SSE event with format()
+    - SSEBroadcaster (class): Fan-out broadcaster with subscribe/publish
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
+
+src/tdd_orchestrator/api/sse_bridge.py:
+  exports:
+    - wire_circuit_breaker_sse (function): Register MetricsCollector callback
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.sse_bridge import wire_circuit_breaker_sse
+
+src/tdd_orchestrator/api/dependencies.py:
+  exports:
+    - get_db_dep (function): FastAPI dependency for OrchestratorDB
+    - get_broadcaster_dep (function): FastAPI dependency for SSEBroadcaster
+    - init_dependencies (function): Startup initialization
+    - shutdown_dependencies (function): Shutdown cleanup
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.dependencies import get_db_dep
+
+src/tdd_orchestrator/api/models/responses.py:
+  exports:
+    - TaskResponse (class): Task summary response model
+    - TaskDetailResponse (class): Task detail with attempts
+    - TaskListResponse (class): Paginated task list
+    - AttemptResponse (class): Task attempt record
+    - WorkerResponse (class): Worker status model
+    - WorkerListResponse (class): Worker list
+    - CircuitBreakerResponse (class): Circuit breaker status
+    - CircuitBreakerListResponse (class): Circuit list with summary
+    - HealthResponse (class): System health status
+    - RunResponse (class): Execution run record
+    - RunListResponse (class): Run list
+    - ProgressResponse (class): Completion progress
+    - StatsResponse (class): Status summary counts
+    - ErrorResponse (class): Structured error
+    - SSEEventData (class): SSE event payload
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.models.responses import TaskResponse
+
+src/tdd_orchestrator/api/models/requests.py:
+  exports:
+    - TaskFilterParams (class): Task query parameters
+    - TaskRetryRequest (class): Retry request body
+    - CircuitResetRequest (class): Circuit reset request body
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.models.requests import TaskFilterParams
+
+src/tdd_orchestrator/api/middleware/error_handler.py:
+  exports:
+    - register_error_handlers (function): Register exception handlers on app
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.middleware.error_handler import register_error_handlers
+
+src/tdd_orchestrator/api/middleware/cors.py:
+  exports:
+    - configure_cors (function): Add CORS middleware with origins
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.middleware.cors import configure_cors
+
+src/tdd_orchestrator/api/routes/health.py:
+  exports:
+    - router (APIRouter): Health check routes
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.routes.health import router
+
+src/tdd_orchestrator/api/routes/tasks.py:
+  exports:
+    - router (APIRouter): Task CRUD routes
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.routes.tasks import router
+
+src/tdd_orchestrator/api/routes/workers.py:
+  exports:
+    - router (APIRouter): Worker status routes
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.routes.workers import router
+
+src/tdd_orchestrator/api/routes/circuits.py:
+  exports:
+    - router (APIRouter): Circuit breaker management routes
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.routes.circuits import router
+
+src/tdd_orchestrator/api/routes/runs.py:
+  exports:
+    - router (APIRouter): Execution run routes
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.routes.runs import router
+
+src/tdd_orchestrator/api/routes/metrics.py:
+  exports:
+    - router (APIRouter): Prometheus metrics route
+  import_pattern: direct
+  test_import: from tdd_orchestrator.api.routes.metrics import router
+
+
+DESIGN CONSTRAINTS (from structured debate verdicts)
+====================================================
+
+DC-1: FastAPI is OPTIONAL (Q1 verdict, MEDIUM confidence)
+  Install via `pip install tdd-orchestrator[api]`. All imports guarded.
+  Sunset when Phase 2 daemon work begins.
+
+DC-2: SSE for real-time events, NOT WebSocket (Q2 verdict, HIGH confidence)
+  Unidirectional push. Mutations via REST. Built-in reconnection.
+
+DC-3: Separate API models from domain models (Q3 verdict, HIGH confidence)
+  Pydantic models in api/models/. Domain dataclasses unchanged.
+
+DC-4: DB queries on existing mixins (Q4 verdict, HIGH confidence)
+  No QueryService. Extract when methods exceed 10.
+
+DC-5: DB-level observer for SSE events (Q5 verdict, HIGH confidence)
+  NOT hooks.py. Callbacks on TaskMixin after commit.
+
+DC-6: Default bind 127.0.0.1 (Q6 verdict, HIGH confidence)
+  Security default. Users opt-in to 0.0.0.0 via --host flag.
+
+DC-7: App-per-test isolation (Q7 verdict, HIGH confidence)
+  create_app(db_path=":memory:") per test. No shared fixtures.
+
+DC-8: Port 8420 default (Q8 verdict, HIGH confidence)
+  Avoids conflict with common dev ports.
+
+DC-9: model_validate + @field_validator (Q9 verdict, HIGH confidence)
+  No explicit converter functions. JSON fields parsed by validators.
+
+DC-10: MetricsCollector callbacks for circuit SSE (Q10 verdict, MEDIUM confidence)
+  Phase 1 only. Adapter in api/sse_bridge.py. Migrate to EventBus Phase 2.
+
+
+DEPENDENCY CHANGES
+==================
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    "sse-starlette>=2.2.0",
+]
