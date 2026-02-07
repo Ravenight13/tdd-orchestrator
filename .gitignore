@@ -21,3 +21,17 @@ htmlcov/
 # Build
 dist/
 build/
+
+# Claude Code - local/personal (do not share)
+.claude/settings.local.json
+.claude/*.local.*
+CLAUDE.local.md
+.claude/plans/
+.claude/agent-memory-local/
+.claude/.session-*
+
+# Archive (pre-extraction snapshot)
+_orchestrator_archived/
+
+# OS
+.DS_Store
