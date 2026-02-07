@@ -143,7 +143,8 @@ class TestBudgetEnforcement:
                 max_workers=2,
                 max_invocations_per_session=2,
                 budget_warning_threshold=80,
-                single_branch_mode=True,  # Avoid Git operations
+                single_branch_mode=True,  # Avoid Git branch operations
+                git_stash_enabled=False,  # Avoid git status in temp dir
             )
 
             pool = WorkerPool(db=db, base_dir=test_dir, config=config)

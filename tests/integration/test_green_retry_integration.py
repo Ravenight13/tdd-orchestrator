@@ -17,6 +17,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from tdd_orchestrator.ast_checker import ASTCheckResult
+
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -105,6 +107,11 @@ class TestGreenRetryIntegration:
                         "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
+                    patch(
+                        "tdd_orchestrator.worker_pool.worker.run_static_review",
+                        new_callable=AsyncMock,
+                        return_value=ASTCheckResult(violations=[], file_path=""),
+                    ),
                 ):
                     # Run full pipeline
                     task = await db.get_task_by_key("TDD-RETRY-01")
@@ -184,6 +191,11 @@ class TestGreenRetryIntegration:
                         "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
                     ),
+                    patch(
+                        "tdd_orchestrator.worker_pool.worker.run_static_review",
+                        new_callable=AsyncMock,
+                        return_value=ASTCheckResult(violations=[], file_path=""),
+                    ),
                 ):
                     task = await db.get_task_by_key("TDD-NO-RETRY")
                     assert task is not None
@@ -257,6 +269,11 @@ class TestGreenRetryIntegration:
                     patch(
                         "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
+                    ),
+                    patch(
+                        "tdd_orchestrator.worker_pool.worker.run_static_review",
+                        new_callable=AsyncMock,
+                        return_value=ASTCheckResult(violations=[], file_path=""),
                     ),
                 ):
                     task = await db.get_task_by_key("TDD-FAIL")
@@ -344,6 +361,11 @@ class TestGreenRetryIntegration:
                     patch(
                         "tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions",
                         return_value=MagicMock(),
+                    ),
+                    patch(
+                        "tdd_orchestrator.worker_pool.worker.run_static_review",
+                        new_callable=AsyncMock,
+                        return_value=ASTCheckResult(violations=[], file_path=""),
                     ),
                 ):
                     task = await db.get_task_by_key("TDD-COMMIT")
