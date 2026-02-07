@@ -29,6 +29,8 @@ CLAUDE.local.md
 .claude/plans/
 .claude/agent-memory-local/
 .claude/.session-*
+.claude/session_state.json
+.claude/task_progress_state.json
 
 # Archive (pre-extraction snapshot)
 _orchestrator_archived/

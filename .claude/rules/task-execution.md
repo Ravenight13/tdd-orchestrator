@@ -99,6 +99,40 @@ Claude must self-check before writing code:
 
 ---
 
+## Anti-Patterns (Hook-Enforced)
+
+The following behaviors are enforced by hooks in `.claude/hooks/`. These are not advisory — they produce hard blocks or warnings at runtime.
+
+### 1. TaskCreate Before Plan Approval — BLOCKED
+
+**Hook:** `plan_mode_gate.sh` (PreToolUse → TaskCreate)
+
+In execution or decision sessions, calling TaskCreate before completing the plan cycle (EnterPlanMode → plan → ExitPlanMode) is **hard-blocked** (exit 2). This enforces Step 2 of the required sequence above.
+
+**Exempt:** Exploration and review sessions, or when no session type is set.
+
+### 2. Multiple Tasks In-Progress — BLOCKED
+
+**Hook:** `single_task_gate.sh` (PreToolUse → TaskUpdate)
+
+Setting a second task to `in_progress` while another is already active is **hard-blocked**. This enforces the "one task at a time" rule from Step 3. Complete or delete the current task before starting the next.
+
+**Idempotent:** Re-setting the same task to `in_progress` is allowed.
+
+### 3. Stopping With Incomplete Tasks — WARNING
+
+**Hook:** `task_stop_check.sh` (Stop)
+
+When the session ends with a task still `in_progress`, a soft warning is emitted suggesting `/cc-handoff` to document the session. This is not a hard block to avoid infinite loops.
+
+### 4. Available Slash Commands — HINT
+
+**Hook:** `prompt_skill_detector.sh` (UserPromptSubmit)
+
+When prompts contain keywords like "handoff", "commit", "review", or "test", the hook suggests the corresponding slash command (`/cc-handoff`, `/commit`, `/code-review`, `/quick-test`). These are informational hints, not blocks.
+
+---
+
 ## Relationship to Other Rules
 
 - **`security.md`**: Governs SQL safety, credential handling, and subprocess execution. Always applies during implementation.
