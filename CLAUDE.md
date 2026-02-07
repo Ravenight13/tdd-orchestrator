@@ -166,3 +166,7 @@ Start: `/cc-ready` | End: `/cc-handoff` | Health: `/quick-test` | Verify: `/veri
 | `planner` | Feature implementation planning, phase breakdown |
 | `docs-writer` | Library API docs, CLI reference, architecture docs |
 | `security-auditor` | SQL injection, subprocess safety, dependency CVEs |
+| `python-reviewer` | Code review: async patterns, mypy strict, Pythonic idioms |
+| `build-error-resolver` | Minimal-diff fixes for mypy, ruff, and pytest failures |
+| `refactor-cleaner` | Dead code removal, file splitting, 800-line enforcement |
+| `e2e-runner` | Playwright E2E tests for frontend and CLI workflows |
