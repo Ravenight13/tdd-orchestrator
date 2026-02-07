@@ -315,7 +315,7 @@ Before writing files, verify inputs:
 - **Empty conversation**: Ask user for session description rather than generating empty files.
 - **Invalid --dry-run placement**: Strip `--dry-run` flag from any position in $ARGUMENTS.
 - **Directory creation failure**: Report error with path and permissions context.
-- **Missing timestamp values**: If any `!` command substitution returns empty, halt and report which timestamp failed.
+- **Missing timestamp values**: If any dynamic command substitution returns empty, halt and report which timestamp failed.
 </error_handling>
 
 <success_criteria>
