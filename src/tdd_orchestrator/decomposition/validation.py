@@ -7,6 +7,7 @@ prompt injection and ensure safe database storage.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 # Valid Python identifier pattern
 VALID_EXPORT_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -97,7 +98,7 @@ def sanitize_export_description(desc: str) -> str:
     return desc.strip()
 
 
-def validate_module_api(api_spec: dict[str, dict]) -> list[str]:
+def validate_module_api(api_spec: dict[str, dict[str, Any]]) -> list[str]:
     """Validate entire MODULE_API_SPECIFICATION for security issues.
 
     Args:

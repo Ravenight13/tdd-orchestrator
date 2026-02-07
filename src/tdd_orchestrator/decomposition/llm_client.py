@@ -15,7 +15,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Protocol, runtime_checkable
 
-import psutil
+import psutil  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +292,7 @@ class ClaudeAgentSDKClient(BaseLLMClient):
             LLMClientError: If the query fails or SDK not installed.
         """
         try:
-            from claude_agent_sdk import ClaudeAgentOptions, query
+            from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore[import-not-found]
 
             options = ClaudeAgentOptions(
                 tools=[],  # Explicitly disable ALL tools for JSON-only responses
@@ -326,7 +326,7 @@ class ClaudeAgentSDKClient(BaseLLMClient):
                                 if block_text is not None:
                                     response_text += str(block_text)
             finally:
-                await generator.aclose()  # type: ignore[attr-defined]
+                await generator.aclose()
 
             return response_text
 

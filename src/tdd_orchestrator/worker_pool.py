@@ -100,7 +100,7 @@ class _StubAgentOptions:
 ClaudeAgentOptions = _StubAgentOptions
 
 try:
-    from claude_agent_sdk import (  # pyright: ignore[reportMissingImports]
+    from claude_agent_sdk import (  # type: ignore[import-not-found]
         ClaudeAgentOptions as _SDKAgentOptions,
         query as _sdk_query,
     )

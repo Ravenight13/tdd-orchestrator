@@ -279,12 +279,13 @@ class TestRunDecomposition:
     @pytest.mark.asyncio
     async def test_dry_run_skips_database(self, temp_spec_file: Path) -> None:
         """Test that dry-run mode skips database loading."""
-        result = await run_decomposition(
-            spec_path=temp_spec_file,
-            prefix="TEST",
-            dry_run=True,
-            use_mock_llm=True,
-        )
+        with patch("tdd_orchestrator.decompose_spec.get_existing_prefixes", return_value=[]):
+            result = await run_decomposition(
+                spec_path=temp_spec_file,
+                prefix="TEST",
+                dry_run=True,
+                use_mock_llm=True,
+            )
 
         assert result == 0
 
@@ -309,14 +310,15 @@ class TestRunDecomposition:
         self, temp_spec_file: Path, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test that verbose flag enables debug logging."""
-        with caplog.at_level(logging.DEBUG):
-            await run_decomposition(
-                spec_path=temp_spec_file,
-                prefix="TEST",
-                dry_run=True,
-                use_mock_llm=True,
-                verbose=True,
-            )
+        with patch("tdd_orchestrator.decompose_spec.get_existing_prefixes", return_value=[]):
+            with caplog.at_level(logging.DEBUG):
+                await run_decomposition(
+                    spec_path=temp_spec_file,
+                    prefix="TEST",
+                    dry_run=True,
+                    use_mock_llm=True,
+                    verbose=True,
+                )
 
         # Should have some debug-level log messages
         assert any(rec.levelno == logging.INFO for rec in caplog.records)
@@ -354,7 +356,9 @@ class TestCLIMain:
             "--dry-run",
         ]
 
-        with patch("sys.argv", test_args):
+        with patch("sys.argv", test_args), patch(
+            "tdd_orchestrator.decompose_spec.get_existing_prefixes", return_value=[]
+        ):
             result = await main()
 
         assert result == 0
@@ -373,7 +377,9 @@ class TestCLIMain:
             "-v",
         ]
 
-        with patch("sys.argv", test_args):
+        with patch("sys.argv", test_args), patch(
+            "tdd_orchestrator.decompose_spec.get_existing_prefixes", return_value=[]
+        ):
             result = await main()
 
         assert result == 0

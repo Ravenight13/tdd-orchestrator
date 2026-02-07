@@ -146,7 +146,7 @@ class TestGenerateFilePaths:
             "SalesforceSettings", "backend/src/integrations/salesforce"
         )
 
-        assert test_file == "backend/tests/unit/salesforce/test_salesforce_settings.py"
+        assert test_file == "tests/unit/salesforce/test_salesforce_settings.py"
         assert impl_file == "backend/src/integrations/salesforce/salesforce_settings.py"
 
     def test_with_custom_test_base(self) -> None:
@@ -162,14 +162,14 @@ class TestGenerateFilePaths:
         """Test with short module path."""
         test_file, impl_file = generate_file_paths("Config", "src/config")
 
-        assert test_file == "backend/tests/unit/config/test_config.py"
+        assert test_file == "tests/unit/config/test_config.py"
         assert impl_file == "src/config/config.py"
 
     def test_trailing_slash_in_module_base(self) -> None:
         """Test that trailing slashes are handled correctly."""
         test_file, impl_file = generate_file_paths("Handler", "backend/src/handlers/")
 
-        assert test_file == "backend/tests/unit/handlers/test_handler.py"
+        assert test_file == "tests/unit/handlers/test_handler.py"
         assert impl_file == "backend/src/handlers/handler.py"
 
 
@@ -476,7 +476,7 @@ class TestGenerateWithFilePaths:
 
         result = generator.generate_with_file_paths(tasks, "backend/src/integrations/salesforce")
 
-        assert result[0].test_file == "backend/tests/unit/salesforce/test_salesforce_client.py"
+        assert result[0].test_file == "tests/unit/salesforce/test_salesforce_client.py"
         assert result[0].impl_file == "backend/src/integrations/salesforce/salesforce_client.py"
 
     def test_preserves_existing_file_paths(self, generator: TaskGenerator) -> None:

@@ -24,6 +24,10 @@ class TestStage:
         """Test that Stage.VERIFY has correct string value 'verify'."""
         assert Stage.VERIFY.value == "verify"
 
+    def test_stage_red_fix_value(self) -> None:
+        """Test that Stage.RED_FIX has correct string value 'red_fix'."""
+        assert Stage.RED_FIX.value == "red_fix"
+
     def test_stage_fix_value(self) -> None:
         """Test that Stage.FIX has correct string value 'fix'."""
         assert Stage.FIX.value == "fix"
@@ -36,14 +40,15 @@ class TestStage:
         """Test that all expected stages exist in the enum."""
         stages = [s.value for s in Stage]
         assert "red" in stages
+        assert "red_fix" in stages
         assert "green" in stages
         assert "verify" in stages
         assert "fix" in stages
         assert "re_verify" in stages
 
     def test_stage_count(self) -> None:
-        """Test that Stage enum has exactly 5 stages."""
-        assert len(Stage) == 5
+        """Test that Stage enum has exactly 6 stages."""
+        assert len(Stage) == 6
 
 
 class TestVerifyResult:

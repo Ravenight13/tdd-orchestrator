@@ -386,7 +386,7 @@ class ProgressFileWriter:
         )
 
         if rows:
-            status = rows[0].get("status", "unknown")
+            status: str = str(rows[0].get("status", "unknown"))
             return status.capitalize()
         return "Unknown"
 

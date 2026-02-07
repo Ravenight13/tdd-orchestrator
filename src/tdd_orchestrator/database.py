@@ -697,7 +697,7 @@ class OrchestratorDB:
         async with self._conn.execute("SELECT value FROM config WHERE key = ?", (key,)) as cursor:
             row = await cursor.fetchone()
             if row:
-                return row["value"]
+                return str(row["value"])
         return default
 
     async def get_config_int(self, key: str, default: int) -> int:

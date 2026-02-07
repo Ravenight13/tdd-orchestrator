@@ -16,11 +16,214 @@ from tdd_orchestrator.decomposition import ParsedSpec, SpecParseError, SpecParse
 if TYPE_CHECKING:
     pass
 
-# Path to the test fixture
-FIXTURE_PATH = Path(
-    "/Users/cliffclarke/Claude_Code/commission-processing-vendor-extractors/"
-    ".claude/docs/plans/salesforce-integration/app_spec.txt"
-)
+# Inline test fixture content that matches original app_spec.txt structure
+_FIXTURE_CONTENT = """\
+SALESFORCE INTEGRATION SPECIFICATION
+=====================================
+
+FUNCTIONAL REQUIREMENTS
+========================
+
+FR-1: Authentication Setup
+OAuth2 authentication with Salesforce API.
+  FR-1.1: JWT Token Generation
+  Generate JWT tokens for server-to-server auth.
+  FR-1.2: Token Caching
+  Cache tokens with TTL-based expiry.
+
+FR-2: Data Upload
+Upload commission data to Salesforce via REST API.
+
+FR-3: Error Handling
+Handle API errors with retries and circuit breakers.
+
+FR-4: Rate Limiting
+Implement rate limiting to respect Salesforce API limits.
+
+FR-5: Batch Processing
+Process records in configurable batch sizes.
+
+FR-6: Field Mapping
+Map internal fields to Salesforce object fields.
+
+FR-7: Validation
+Validate data before upload to Salesforce.
+
+FR-8: Logging
+Structured logging for audit trail.
+
+FR-9: Configuration
+External configuration for Salesforce connection settings.
+
+NON-FUNCTIONAL REQUIREMENTS
+============================
+
+NFR-1: Performance
+Response time under 200ms for single record operations.
+
+NFR-2: Reliability
+99.9% uptime with automatic failover.
+
+NFR-3: Scalability
+Handle up to 100k records per batch.
+
+NFR-4: Security
+All credentials encrypted at rest and in transit.
+
+NFR-5: Observability
+Prometheus metrics and structured JSON logging.
+
+NFR-6: Maintainability
+Code coverage above 90%.
+
+ACCEPTANCE CRITERIA
+====================
+
+AC-1: Login Flow
+GIVEN valid OAuth2 credentials
+WHEN the client authenticates
+THEN a valid access token is returned
+
+AC-2: Token Refresh
+GIVEN an expired token
+WHEN a request is made
+THEN the token is refreshed automatically
+
+AC-3: Data Upload Success
+GIVEN valid commission records
+WHEN uploaded to Salesforce
+THEN all records are created successfully
+
+AC-4: Upload Error Handling
+GIVEN an API error during upload
+WHEN the error is transient
+THEN the upload is retried up to 3 times
+
+AC-5: Rate Limit Handling
+GIVEN API rate limit is exceeded
+WHEN a request fails with 429
+THEN the client backs off exponentially
+
+AC-6: Batch Processing
+GIVEN 10000 records
+WHEN batch processing is initiated
+THEN records are processed in chunks of 200
+
+AC-7: Field Mapping Validation
+GIVEN a field mapping configuration
+WHEN validation runs
+THEN invalid mappings are reported
+
+AC-8: Schema Validation
+GIVEN incoming data
+WHEN validated against schema
+THEN invalid records are rejected with details
+
+AC-9: Logging Format
+GIVEN any operation
+WHEN logged
+THEN output is structured JSON
+
+AC-10: Config Loading
+GIVEN a configuration file
+WHEN loaded
+THEN all required fields are validated
+
+AC-11: Connection Pooling
+GIVEN multiple concurrent requests
+WHEN connections are needed
+THEN they are reused from the pool
+
+AC-12: Metrics Export
+GIVEN ongoing operations
+WHEN metrics are scraped
+THEN Prometheus format data is returned
+
+AC-13: Graceful Shutdown
+GIVEN a shutdown signal
+WHEN in-flight requests exist
+THEN they complete before exit
+
+IMPLEMENTATION PLAN
+====================
+
+### Phase 0: Foundation
+
+**TDD Cycle 1: Config Setup**
+- ConfigLoader
+- SettingsValidator
+Tests: 8-10
+
+**TDD Cycle 2: Auth Foundation**
+- JWTGenerator
+- TokenCache
+Tests: 10-12
+
+**TDD Cycle 3: HTTP Client**
+- SalesforceHTTPClient
+- RetryHandler
+Tests: 8-10
+
+### Phase 1: Core Features
+
+**TDD Cycle 4: Data Uploader**
+- SalesforceUploader
+- BatchProcessor
+Tests: 12-15
+
+**TDD Cycle 5: Field Mapping**
+- FieldMapper
+- MappingValidator
+Tests: 8-10
+
+**TDD Cycle 6: Error Handling**
+- CircuitBreaker
+- ErrorClassifier
+Tests: 10-12
+
+### Phase 2: Integration
+
+**TDD Cycle 7: Rate Limiter**
+- RateLimiter
+- BackoffStrategy
+Tests: 8-10
+
+**TDD Cycle 8: Validation Pipeline**
+- SchemaValidator
+- RecordValidator
+Tests: 10-12
+
+**TDD Cycle 9: Logging**
+- StructuredLogger
+- AuditTrail
+Tests: 6-8
+
+### Phase 3: Production Readiness
+
+**TDD Cycle 10: Metrics**
+- MetricsCollector
+- PrometheusExporter
+Tests: 8-10
+
+**TDD Cycle 11: Connection Pool**
+- ConnectionPool
+- HealthChecker
+Tests: 8-10
+
+**TDD Cycle 12: Graceful Shutdown**
+- ShutdownHandler
+- RequestDrainer
+Tests: 6-8
+
+MODULE STRUCTURE
+-----------------
+backend/src/integrations/salesforce/
+salesforce_uploader.py
+config_loader.py
+jwt_generator.py
+field_mapper.py
+rate_limiter.py
+"""
 
 
 class TestSpecParser:
@@ -32,9 +235,16 @@ class TestSpecParser:
         return SpecParser()
 
     @pytest.fixture
-    def parsed_spec(self, parser: SpecParser) -> ParsedSpec:
+    def fixture_path(self, tmp_path: Path) -> Path:
+        """Create a temporary app_spec.txt file for testing."""
+        spec_file = tmp_path / "app_spec.txt"
+        spec_file.write_text(_FIXTURE_CONTENT)
+        return spec_file
+
+    @pytest.fixture
+    def parsed_spec(self, parser: SpecParser, fixture_path: Path) -> ParsedSpec:
         """Parse the test fixture and return ParsedSpec."""
-        return parser.parse(FIXTURE_PATH)
+        return parser.parse(fixture_path)
 
     def test_parse_valid_app_spec_successfully(
         self, parser: SpecParser, parsed_spec: ParsedSpec
