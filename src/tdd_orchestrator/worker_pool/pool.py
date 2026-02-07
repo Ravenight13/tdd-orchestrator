@@ -1,0 +1,195 @@
+"""Worker pool for parallel task execution.
+
+Manages a pool of workers that process TDD tasks in parallel,
+with database-backed task claiming and Git branch coordination.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+from ..database import OrchestratorDB
+from ..git_coordinator import GitCoordinator
+from ..merge_coordinator import MergeCoordinator
+from ..progress_writer import ProgressFileWriter
+from .config import PoolResult, WorkerConfig
+from .worker import Worker
+
+logger = logging.getLogger(__name__)
+
+
+class WorkerPool:
+    """Manages parallel worker execution."""
+
+    def __init__(
+        self,
+        db: OrchestratorDB,
+        base_dir: Path,
+        config: WorkerConfig | None = None,
+        slack_webhook_url: str | None = None,
+    ) -> None:
+        """Initialize worker pool.
+
+        Args:
+            db: Database instance.
+            base_dir: Root directory of the Git repository.
+            config: Worker configuration.
+            slack_webhook_url: Slack webhook for notifications.
+        """
+        self.db = db
+        self.base_dir = base_dir
+        self.config = config or WorkerConfig()
+        self.git = GitCoordinator(base_dir)
+        self.merge = MergeCoordinator(base_dir, slack_webhook_url)
+        self.workers: list[Worker] = []
+        self.run_id: int = 0
+        self.progress_writer: ProgressFileWriter | None = None
+        if self.config.progress_file_enabled:
+            self.progress_writer = ProgressFileWriter(
+                db=db, output_path=Path(self.config.progress_file_path)
+            )
+
+    async def run_parallel_phase(self, phase: int | None = None) -> PoolResult:
+        """Run all tasks in a phase in parallel.
+
+        Only Phase 0 tasks (no dependencies) are processed in parallel.
+
+        Args:
+            phase: Phase number to process.
+
+        Returns:
+            PoolResult with completion statistics.
+        """
+        # Start execution run
+        self.run_id = await self.db.start_execution_run(self.config.max_workers)
+
+        result = PoolResult(
+            tasks_completed=0,
+            tasks_failed=0,
+            total_invocations=0,
+            worker_stats=[],
+        )
+
+        try:
+            # Initialize progress writer with run_id
+            if self.progress_writer:
+                self.progress_writer.run_id = self.run_id
+                self.progress_writer.start_time = datetime.now()
+
+            # Get claimable tasks for this phase
+            tasks = await self.db.get_claimable_tasks(phase)
+            if not tasks:
+                logger.info(
+                    "No tasks available for phase %s", phase if phase is not None else "all"
+                )
+                result.stopped_reason = "no_tasks"
+                return result
+
+            logger.info(
+                "Found %d tasks for phase %s", len(tasks), phase if phase is not None else "all"
+            )
+
+            # Create and start workers
+            self.workers = [
+                Worker(i, self.db, self.git, self.config, self.run_id, self.base_dir)
+                for i in range(1, self.config.max_workers + 1)
+            ]
+
+            for worker in self.workers:
+                await worker.start()
+
+            # Process tasks with worker pool
+            task_queue = list(tasks)
+
+            while task_queue:
+                # Check budget
+                count, limit, is_warning = await self.db.check_invocation_budget(self.run_id)
+
+                if count >= limit:
+                    logger.warning("Invocation limit reached (%d/%d)", count, limit)
+                    result.stopped_reason = "invocation_limit"
+                    break
+
+                if is_warning:
+                    logger.warning(
+                        "Budget warning: %d/%d invocations (%.0f%%)",
+                        count,
+                        limit,
+                        count / limit * 100,
+                    )
+
+                # Assign tasks to workers
+                worker_tasks: list[tuple[Worker, dict[str, Any]]] = []
+
+                for worker in self.workers:
+                    if task_queue:
+                        task = task_queue.pop(0)
+                        worker_tasks.append((worker, task))
+
+                if not worker_tasks:
+                    break
+
+                # Process tasks in parallel
+                results = await asyncio.gather(
+                    *[worker.process_task(task) for worker, task in worker_tasks],
+                    return_exceptions=True,
+                )
+
+                # Check for failures (100% success required)
+                for i, (worker, _) in enumerate(worker_tasks):
+                    if isinstance(results[i], Exception):
+                        logger.error("Worker %d exception: %s", worker.worker_id, results[i])
+                        result.tasks_failed += 1
+                    elif results[i] is True:
+                        result.tasks_completed += 1
+                    else:
+                        result.tasks_failed += 1
+
+                # Update progress file after each batch of tasks
+                if self.progress_writer:
+                    await self.progress_writer.update()
+
+                # Stop on any failure (100% success required)
+                if result.tasks_failed > 0:
+                    logger.error("Task failure detected - stopping (100%% success required)")
+                    result.stopped_reason = "task_failure"
+                    break
+
+            # Cleanup stale claims
+            await self.db.cleanup_stale_claims()
+
+            # Merge completed branches (skip in single branch mode - already on main)
+            if result.tasks_completed > 0 and not self.config.single_branch_mode:
+                completed_tasks = [t for t in tasks[: result.tasks_completed]]
+                branches = [
+                    (
+                        f"worker-{(i % self.config.max_workers) + 1}/{t['task_key']}",
+                        t["task_key"],
+                    )
+                    for i, t in enumerate(completed_tasks)
+                ]
+
+                merge_results = await self.merge.merge_phase_branches(phase, branches)
+
+                for mr in merge_results:
+                    if not mr.success:
+                        logger.error("Merge failed for %s: %s", mr.branch, mr.error_message)
+                        result.stopped_reason = "merge_failure"
+
+        finally:
+            # Stop all workers
+            for worker in self.workers:
+                await worker.stop()
+                result.worker_stats.append(worker.stats)
+
+            # Complete execution run
+            status = "completed" if result.stopped_reason is None else "failed"
+            await self.db.complete_execution_run(self.run_id, status)
+
+            result.total_invocations = await self.db.get_invocation_count(self.run_id)
+
+        return result
