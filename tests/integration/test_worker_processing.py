@@ -1,5 +1,6 @@
 """Worker processing tests - TDD pipeline stage execution."""
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,7 +17,7 @@ class TestTaskProcessing:
     """TDD pipeline stage execution tests."""
 
     @pytest.mark.asyncio
-    async def test_red_stage_succeeds_when_pytest_fails(self) -> None:
+    async def test_red_stage_succeeds_when_pytest_fails(self, tmp_path: Path) -> None:
         """RED stage succeeds when pytest fails (tests not yet implemented)."""
         async with OrchestratorDB(":memory:") as db:
             # Create test data
@@ -36,7 +37,7 @@ class TestTaskProcessing:
 
             # Create worker with single_branch_mode to avoid Git operations
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to return failing pytest (expected for RED stage)
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
@@ -66,7 +67,7 @@ class TestTaskProcessing:
                         assert "FAILED" in result.output
 
     @pytest.mark.asyncio
-    async def test_green_stage_succeeds_when_pytest_passes(self) -> None:
+    async def test_green_stage_succeeds_when_pytest_passes(self, tmp_path: Path) -> None:
         """GREEN stage succeeds when pytest passes."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -81,7 +82,7 @@ class TestTaskProcessing:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to return passing pytest
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
@@ -113,7 +114,7 @@ class TestTaskProcessing:
                         assert "1 passed" in result.output
 
     @pytest.mark.asyncio
-    async def test_verify_stage_collects_issues(self) -> None:
+    async def test_verify_stage_collects_issues(self, tmp_path: Path) -> None:
         """VERIFY stage collects issues from failed tools."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -128,7 +129,7 @@ class TestTaskProcessing:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier with some failures
             mock_verify_result = VerifyResult(
@@ -171,8 +172,14 @@ class TestTaskProcessing:
                         assert "mypy" in tool_names
 
     @pytest.mark.asyncio
-    async def test_process_task_claims_before_processing(self) -> None:
+    async def test_process_task_claims_before_processing(self, tmp_path: Path) -> None:
         """process_task claims task before running pipeline."""
+        # Initialize git repo in tmp_path for GitStashGuard compatibility
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "init"],
+            cwd=tmp_path, capture_output=True, check=True,
+        )
         async with OrchestratorDB(":memory:") as db:
             await db.register_worker(1)
             run_id = await db.start_execution_run(max_workers=1)
@@ -188,7 +195,7 @@ class TestTaskProcessing:
             mock_git = MagicMock()
             mock_git.commit_changes = AsyncMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock successful TDD pipeline
             with patch.object(worker, "_run_tdd_pipeline", new_callable=AsyncMock) as mock_pipeline:
@@ -211,8 +218,14 @@ class TestTaskProcessing:
                 assert updated_task["status"] == "complete"
 
     @pytest.mark.asyncio
-    async def test_process_task_releases_on_success(self) -> None:
+    async def test_process_task_releases_on_success(self, tmp_path: Path) -> None:
         """process_task releases task with 'completed' outcome on success."""
+        # Initialize git repo in tmp_path for GitStashGuard compatibility
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "init"],
+            cwd=tmp_path, capture_output=True, check=True,
+        )
         async with OrchestratorDB(":memory:") as db:
             await db.register_worker(1)
             run_id = await db.start_execution_run(max_workers=1)
@@ -228,7 +241,7 @@ class TestTaskProcessing:
             mock_git = MagicMock()
             mock_git.commit_changes = AsyncMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock successful pipeline
             with patch.object(worker, "_run_tdd_pipeline", new_callable=AsyncMock) as mock_pipeline:
@@ -254,8 +267,14 @@ class TestTaskProcessing:
                 assert worker.stats.tasks_failed == 0
 
     @pytest.mark.asyncio
-    async def test_process_task_releases_on_failure(self) -> None:
+    async def test_process_task_releases_on_failure(self, tmp_path: Path) -> None:
         """process_task releases task with 'failed' outcome on failure."""
+        # Initialize git repo in tmp_path for GitStashGuard compatibility
+        subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "init"],
+            cwd=tmp_path, capture_output=True, check=True,
+        )
         async with OrchestratorDB(":memory:") as db:
             await db.register_worker(1)
             run_id = await db.start_execution_run(max_workers=1)
@@ -270,7 +289,7 @@ class TestTaskProcessing:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock failed pipeline
             with patch.object(worker, "_run_tdd_pipeline", new_callable=AsyncMock) as mock_pipeline:

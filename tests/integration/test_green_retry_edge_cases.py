@@ -21,7 +21,7 @@ class TestGreenRetryEdgeCases:
     """Edge case tests for _run_green_with_retry."""
 
     @pytest.mark.asyncio
-    async def test_aggregate_timeout_exceeded(self) -> None:
+    async def test_aggregate_timeout_exceeded(self, tmp_path: Path) -> None:
         """Test retry stops when total time exceeds aggregate timeout."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -43,7 +43,7 @@ class TestGreenRetryEdgeCases:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to always fail pytest
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
@@ -105,7 +105,7 @@ class TestGreenRetryEdgeCases:
                                 assert 3 <= len(green_attempts) <= 5
 
     @pytest.mark.asyncio
-    async def test_empty_test_output(self) -> None:
+    async def test_empty_test_output(self, tmp_path: Path) -> None:
         """Test handles empty/None test output gracefully."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -122,7 +122,7 @@ class TestGreenRetryEdgeCases:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to return empty/None output
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
@@ -159,7 +159,7 @@ class TestGreenRetryEdgeCases:
                         assert len(green_attempts) == 2
 
     @pytest.mark.asyncio
-    async def test_large_test_output_truncation(self) -> None:
+    async def test_large_test_output_truncation(self, tmp_path: Path) -> None:
         """Test output exceeding MAX_TEST_OUTPUT_SIZE is truncated."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -176,7 +176,7 @@ class TestGreenRetryEdgeCases:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Create output larger than MAX_TEST_OUTPUT_SIZE (3000)
             large_output = "x" * 5000
@@ -230,7 +230,7 @@ class TestGreenRetryEdgeCases:
                 assert len(prev_failure_3) == MAX_TEST_OUTPUT_SIZE
 
     @pytest.mark.asyncio
-    async def test_invalid_config_uses_default(self) -> None:
+    async def test_invalid_config_uses_default(self, tmp_path: Path) -> None:
         """Test invalid config values fall back to defaults."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -249,7 +249,7 @@ class TestGreenRetryEdgeCases:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to fail then succeed
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
@@ -284,7 +284,7 @@ class TestGreenRetryEdgeCases:
                         assert len(green_attempts) == 2
 
     @pytest.mark.asyncio
-    async def test_config_bounds_clamping(self) -> None:
+    async def test_config_bounds_clamping(self, tmp_path: Path) -> None:
         """Test values outside bounds (1-10) get clamped."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -304,7 +304,7 @@ class TestGreenRetryEdgeCases:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to always fail
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
@@ -338,7 +338,7 @@ class TestGreenRetryEdgeCases:
                         assert len(green_attempts) == 10  # Clamped to max bound
 
     @pytest.mark.asyncio
-    async def test_zero_delay_no_sleep(self) -> None:
+    async def test_zero_delay_no_sleep(self, tmp_path: Path) -> None:
         """Test delay_ms=0 doesn't call asyncio.sleep."""
         async with OrchestratorDB(":memory:") as db:
             run_id = await db.start_execution_run(max_workers=1)
@@ -357,7 +357,7 @@ class TestGreenRetryEdgeCases:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier to fail then succeed
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:

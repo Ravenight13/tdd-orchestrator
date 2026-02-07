@@ -30,7 +30,7 @@ class TestSDKInitialization:
         assert isinstance(worker_pool.HAS_AGENT_SDK, bool)
 
     @pytest.mark.asyncio
-    async def test_worker_starts_without_sdk(self) -> None:
+    async def test_worker_starts_without_sdk(self, tmp_path: Path) -> None:
         """Worker can start even if SDK is not available."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -43,7 +43,7 @@ class TestSDKInitialization:
                     git=git,
                     config=config,
                     run_id=1,
-                    base_dir=Path("/tmp"),
+                    base_dir=tmp_path,
                 )
 
                 await worker.start()
@@ -57,7 +57,7 @@ class TestSDKInitialization:
                 await worker.stop()
 
     @pytest.mark.asyncio
-    async def test_run_tdd_pipeline_fails_gracefully_without_sdk(self) -> None:
+    async def test_run_tdd_pipeline_fails_gracefully_without_sdk(self, tmp_path: Path) -> None:
         """TDD pipeline returns False when SDK not available."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -81,7 +81,7 @@ class TestSDKInitialization:
                     git=git,
                     config=config,
                     run_id=1,
-                    base_dir=Path("/tmp"),
+                    base_dir=tmp_path,
                 )
 
                 result = await worker._run_tdd_pipeline(task)
@@ -94,7 +94,7 @@ class TestSDKRateLimiting:
     """Tests for SDK rate limiting and retry behavior."""
 
     @pytest.mark.asyncio
-    async def test_worker_handles_sdk_exception(self) -> None:
+    async def test_worker_handles_sdk_exception(self, tmp_path: Path) -> None:
         """Worker handles SDK exceptions gracefully without crashing."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -106,7 +106,7 @@ class TestSDKRateLimiting:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             await worker.start()
@@ -134,7 +134,7 @@ class TestSDKRateLimiting:
                     pytest.fail("Worker stop should not raise even after errors")
 
     @pytest.mark.asyncio
-    async def test_stage_handles_sdk_timeout(self) -> None:
+    async def test_stage_handles_sdk_timeout(self, tmp_path: Path) -> None:
         """Stage execution handles SDK timeout gracefully."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -157,7 +157,7 @@ class TestSDKRateLimiting:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Mock SDK to raise timeout exception
@@ -182,7 +182,7 @@ class TestWorkerLifecycle:
     """Tests for worker lifecycle with failure scenarios."""
 
     @pytest.mark.asyncio
-    async def test_worker_cleanup_on_exception(self) -> None:
+    async def test_worker_cleanup_on_exception(self, tmp_path: Path) -> None:
         """Worker cleans up properly even when exception occurs."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -194,7 +194,7 @@ class TestWorkerLifecycle:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             await worker.start()
@@ -213,7 +213,7 @@ class TestWorkerLifecycle:
                 assert row is None or row["status"] == "idle"
 
     @pytest.mark.asyncio
-    async def test_heartbeat_continues_during_processing(self) -> None:
+    async def test_heartbeat_continues_during_processing(self, tmp_path: Path) -> None:
         """Heartbeat loop continues while worker processes tasks."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -225,7 +225,7 @@ class TestWorkerLifecycle:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             await worker.start()
@@ -248,7 +248,7 @@ class TestWorkerLifecycle:
             await worker.stop()
 
     @pytest.mark.asyncio
-    async def test_stop_cancels_heartbeat(self) -> None:
+    async def test_stop_cancels_heartbeat(self, tmp_path: Path) -> None:
         """Worker stop cancels the heartbeat task."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -260,7 +260,7 @@ class TestWorkerLifecycle:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             await worker.start()
@@ -272,7 +272,7 @@ class TestWorkerLifecycle:
             assert worker._heartbeat_task.cancelled() or worker._heartbeat_task.done()
 
     @pytest.mark.asyncio
-    async def test_worker_handles_heartbeat_errors(self) -> None:
+    async def test_worker_handles_heartbeat_errors(self, tmp_path: Path) -> None:
         """Worker continues even if heartbeat update fails."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -284,7 +284,7 @@ class TestWorkerLifecycle:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             await worker.start()
@@ -330,7 +330,7 @@ class TestBudgetEnforcement:
         assert config.budget_warning_threshold == 80
 
     @pytest.mark.asyncio
-    async def test_budget_limit_prevents_stage_execution(self) -> None:
+    async def test_budget_limit_prevents_stage_execution(self, tmp_path: Path) -> None:
         """Stage execution is blocked when budget limit is reached."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -359,7 +359,7 @@ class TestBudgetEnforcement:
                 git=git,
                 config=config,
                 run_id=run_id,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Record 5 invocations (hit limit)
@@ -381,7 +381,7 @@ class TestBudgetEnforcement:
                 assert "budget" in result.error.lower() if result.error else False
 
     @pytest.mark.asyncio
-    async def test_invocation_recorded_even_on_failure(self) -> None:
+    async def test_invocation_recorded_even_on_failure(self, tmp_path: Path) -> None:
         """Invocation is recorded even when stage execution fails."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -406,7 +406,7 @@ class TestBudgetEnforcement:
                 git=git,
                 config=config,
                 run_id=run_id,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Mock SDK to raise exception
@@ -434,7 +434,7 @@ class TestSDKIntegrationErrors:
     """Tests for SDK integration error scenarios."""
 
     @pytest.mark.asyncio
-    async def test_sdk_import_error_handled(self) -> None:
+    async def test_sdk_import_error_handled(self, tmp_path: Path) -> None:
         """Worker handles SDK import errors gracefully."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -452,7 +452,7 @@ class TestSDKIntegrationErrors:
                     git=git,
                     config=config,
                     run_id=1,
-                    base_dir=Path("/tmp"),
+                    base_dir=tmp_path,
                 )
 
                 # Worker should still start
@@ -467,7 +467,7 @@ class TestSDKIntegrationErrors:
                 await worker.stop()
 
     @pytest.mark.asyncio
-    async def test_stage_returns_error_when_sdk_missing(self) -> None:
+    async def test_stage_returns_error_when_sdk_missing(self, tmp_path: Path) -> None:
         """Stage execution returns clear error when SDK is missing."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -490,7 +490,7 @@ class TestSDKIntegrationErrors:
                 git=git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             with (
@@ -507,7 +507,7 @@ class TestSDKIntegrationErrors:
                 assert result.error == "Agent SDK not available"
 
     @pytest.mark.asyncio
-    async def test_worker_stats_updated_on_sdk_failure(self) -> None:
+    async def test_worker_stats_updated_on_sdk_failure(self, tmp_path: Path) -> None:
         """Worker stats are properly updated even when SDK fails."""
         async with OrchestratorDB(":memory:") as db:
             git = MagicMock()
@@ -537,7 +537,7 @@ class TestSDKIntegrationErrors:
                 git=git,
                 config=config,
                 run_id=run_id,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             await worker.start()

@@ -32,7 +32,7 @@ class TestGreenRetryUnit:
     """Unit tests for _run_green_with_retry method."""
 
     @pytest.fixture
-    async def mock_worker(self) -> AsyncMock:  # type: ignore[misc]
+    async def mock_worker(self, tmp_path: Path) -> AsyncMock:  # type: ignore[misc]
         """Create a mock Worker with necessary attributes for testing.
 
         Returns:
@@ -42,7 +42,7 @@ class TestGreenRetryUnit:
             run_id = await db.start_execution_run(max_workers=1)
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock _run_stage to avoid actual SDK calls
             worker._run_stage = AsyncMock()  # type: ignore[method-assign]
@@ -50,7 +50,7 @@ class TestGreenRetryUnit:
             yield worker
 
     @pytest.mark.asyncio
-    async def test_green_succeeds_first_attempt(self, mock_worker: Worker) -> None:
+    async def test_green_succeeds_first_attempt(self, mock_worker: Worker, tmp_path: Path) -> None:
         """GREEN passes on first attempt - no retry needed.
 
         Verifies:
@@ -72,7 +72,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock successful GREEN result
             worker._run_stage = AsyncMock(  # type: ignore[method-assign]
@@ -114,7 +114,7 @@ class TestGreenRetryUnit:
                 )
 
     @pytest.mark.asyncio
-    async def test_green_fails_then_succeeds(self, mock_worker: Worker) -> None:
+    async def test_green_fails_then_succeeds(self, mock_worker: Worker, tmp_path: Path) -> None:
         """First attempt fails, second succeeds.
 
         Verifies:
@@ -137,7 +137,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock GREEN results: first fail, second succeed
             worker._run_stage = AsyncMock(  # type: ignore[method-assign]
@@ -204,7 +204,7 @@ class TestGreenRetryUnit:
                 )
 
     @pytest.mark.asyncio
-    async def test_green_exhausts_all_attempts(self, mock_worker: Worker) -> None:
+    async def test_green_exhausts_all_attempts(self, mock_worker: Worker, tmp_path: Path) -> None:
         """All attempts fail, returns failure.
 
         Verifies:
@@ -226,7 +226,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock GREEN results: all fail
             worker._run_stage = AsyncMock(  # type: ignore[method-assign]
@@ -278,7 +278,7 @@ class TestGreenRetryUnit:
                     )
 
     @pytest.mark.asyncio
-    async def test_config_respected(self, mock_worker: Worker) -> None:
+    async def test_config_respected(self, mock_worker: Worker, tmp_path: Path) -> None:
         """max_attempts and delay_ms are read from config.
 
         Verifies:
@@ -299,7 +299,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock GREEN results: all fail to test max_attempts
             worker._run_stage = AsyncMock(  # type: ignore[method-assign]
@@ -339,7 +339,7 @@ class TestGreenRetryUnit:
                     assert call_obj == call(0.75)  # 750ms = 0.75s
 
     @pytest.mark.asyncio
-    async def test_attempt_numbers_increment(self, mock_worker: Worker) -> None:
+    async def test_attempt_numbers_increment(self, mock_worker: Worker, tmp_path: Path) -> None:
         """Each attempt recorded with correct attempt_number.
 
         Verifies:
@@ -361,7 +361,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock GREEN results: 3 failures then success
             worker._run_stage = AsyncMock(  # type: ignore[method-assign]
@@ -405,7 +405,7 @@ class TestGreenRetryUnit:
                 assert stage_calls[3].kwargs["attempt"] == 4
 
     @pytest.mark.asyncio
-    async def test_aggregate_timeout_enforced(self, mock_worker: Worker) -> None:
+    async def test_aggregate_timeout_enforced(self, mock_worker: Worker, tmp_path: Path) -> None:
         """Aggregate timeout stops retry attempts early.
 
         Verifies:
@@ -426,7 +426,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Track call count to advance mock time
             call_count = 0
@@ -473,7 +473,7 @@ class TestGreenRetryUnit:
                 assert result.success is False
 
     @pytest.mark.asyncio
-    async def test_previous_failure_truncated(self, mock_worker: Worker) -> None:
+    async def test_previous_failure_truncated(self, mock_worker: Worker, tmp_path: Path) -> None:
         """Previous failure output truncated to MAX_TEST_OUTPUT_SIZE.
 
         Verifies:
@@ -493,7 +493,7 @@ class TestGreenRetryUnit:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock GREEN results: large failure then success
             large_output = "X" * 100000  # Very large output

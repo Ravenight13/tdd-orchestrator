@@ -31,7 +31,7 @@ class TestGreenRetryIntegration:
     """Integration tests for GREEN retry in full TDD pipeline."""
 
     @pytest.mark.asyncio
-    async def test_pipeline_with_green_retry(self) -> None:
+    async def test_pipeline_with_green_retry(self, tmp_path: Path) -> None:
         """Full TDD pipeline where GREEN needs retry to succeed.
 
         Tests the happy path where:
@@ -61,7 +61,7 @@ class TestGreenRetryIntegration:
 
             # Create worker
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Track pytest calls to simulate RED, GREEN attempt 1 (fail), GREEN attempt 2 (pass)
             pytest_calls = {"count": 0}
@@ -129,7 +129,7 @@ class TestGreenRetryIntegration:
                     assert green_attempts[1]["success"] == 1  # Second attempt succeeded
 
     @pytest.mark.asyncio
-    async def test_pipeline_green_success_no_retry(self) -> None:
+    async def test_pipeline_green_success_no_retry(self, tmp_path: Path) -> None:
         """GREEN passes on first attempt, no retry needed.
 
         Tests that when GREEN succeeds immediately:
@@ -153,7 +153,7 @@ class TestGreenRetryIntegration:
             mock_git.commit = AsyncMock()
 
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Track pytest calls: RED fail, GREEN pass
             pytest_calls = {"count": 0}
@@ -211,7 +211,7 @@ class TestGreenRetryIntegration:
                     assert green_attempts[0]["success"] == 1
 
     @pytest.mark.asyncio
-    async def test_mark_task_failing_on_exhausted_attempts(self) -> None:
+    async def test_mark_task_failing_on_exhausted_attempts(self, tmp_path: Path) -> None:
         """Verify mark_task_failing() called when GREEN attempts exhausted.
 
         Tests that when all GREEN attempts fail:
@@ -238,7 +238,7 @@ class TestGreenRetryIntegration:
             mock_git.create_worker_branch = AsyncMock(return_value="worker-1/TDD-FAIL")
 
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Mock verifier: RED succeeds, GREEN always fails
             async def mock_run_pytest(test_file: str) -> tuple[bool, str]:
@@ -297,7 +297,7 @@ class TestGreenRetryIntegration:
                     assert final_task["status"] == "blocked"
 
     @pytest.mark.asyncio
-    async def test_git_commit_only_on_success(self) -> None:
+    async def test_git_commit_only_on_success(self, tmp_path: Path) -> None:
         """Verify git commit stage tracking works correctly with GREEN retry.
 
         Tests that:
@@ -321,7 +321,7 @@ class TestGreenRetryIntegration:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Track pytest calls: RED fail, GREEN attempt 1 fail, GREEN attempt 2 pass
             pytest_calls = {"count": 0}
@@ -383,7 +383,7 @@ class TestGreenRetryIntegration:
                     assert green_attempts[1]["success"] == 1
 
     @pytest.mark.asyncio
-    async def test_green_retry_respects_delay_config(self) -> None:
+    async def test_green_retry_respects_delay_config(self, tmp_path: Path) -> None:
         """Verify delay between GREEN retry attempts is respected.
 
         Tests that:
@@ -407,7 +407,7 @@ class TestGreenRetryIntegration:
 
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
-            worker = Worker(1, db, mock_git, config, run_id, Path.cwd())
+            worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
             # Track timing of attempts
             import time

@@ -16,7 +16,7 @@ class TestWorkerLifecycle:
     """Worker start/stop and heartbeat tests."""
 
     @pytest.mark.asyncio
-    async def test_worker_registers_on_start(self) -> None:
+    async def test_worker_registers_on_start(self, tmp_path: Path) -> None:
         """Worker registers in database on start."""
         async with OrchestratorDB(":memory:") as db:
             # Create mock GitCoordinator
@@ -30,7 +30,7 @@ class TestWorkerLifecycle:
                 git=mock_git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Start worker
@@ -51,7 +51,7 @@ class TestWorkerLifecycle:
             await worker.stop()
 
     @pytest.mark.asyncio
-    async def test_worker_heartbeat_updates_timestamp(self) -> None:
+    async def test_worker_heartbeat_updates_timestamp(self, tmp_path: Path) -> None:
         """Heartbeat updates last_heartbeat column."""
         async with OrchestratorDB(":memory:") as db:
             # Create mock GitCoordinator
@@ -65,7 +65,7 @@ class TestWorkerLifecycle:
                 git=mock_git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Start worker
@@ -91,7 +91,7 @@ class TestWorkerLifecycle:
             await worker.stop()
 
     @pytest.mark.asyncio
-    async def test_worker_unregisters_on_stop(self) -> None:
+    async def test_worker_unregisters_on_stop(self, tmp_path: Path) -> None:
         """Worker unregisters from database on stop."""
         async with OrchestratorDB(":memory:") as db:
             # Create mock GitCoordinator
@@ -105,7 +105,7 @@ class TestWorkerLifecycle:
                 git=mock_git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Start then stop worker
@@ -135,7 +135,7 @@ class TestWorkerLifecycle:
                     assert row[0] == "idle"
 
     @pytest.mark.asyncio
-    async def test_worker_stop_cancels_heartbeat(self) -> None:
+    async def test_worker_stop_cancels_heartbeat(self, tmp_path: Path) -> None:
         """Stop cancels the heartbeat task cleanly."""
         async with OrchestratorDB(":memory:") as db:
             # Create mock GitCoordinator
@@ -149,7 +149,7 @@ class TestWorkerLifecycle:
                 git=mock_git,
                 config=config,
                 run_id=1,
-                base_dir=Path("/tmp"),
+                base_dir=tmp_path,
             )
 
             # Start worker
@@ -206,7 +206,7 @@ class TestWorkerLifecycle:
                     assert row[0] is None, "Expected NULL task_id for idle worker"
 
     @pytest.mark.asyncio
-    async def test_multiple_workers_register_independently(self) -> None:
+    async def test_multiple_workers_register_independently(self, tmp_path: Path) -> None:
         """Multiple workers can register and operate independently."""
         async with OrchestratorDB(":memory:") as db:
             # Create mock GitCoordinator
@@ -221,7 +221,7 @@ class TestWorkerLifecycle:
                     git=mock_git,
                     config=config,
                     run_id=1,
-                    base_dir=Path("/tmp"),
+                    base_dir=tmp_path,
                 )
                 for i in range(1, 4)
             ]
