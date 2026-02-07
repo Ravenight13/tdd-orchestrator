@@ -715,28 +715,13 @@ async def retry_task(
     ...
 ```
 
-**Conversion logic:** Each DB row dict (`dict[str, Any]`) is converted to a Pydantic model via a helper:
+**Conversion logic:** Each DB row dict (`dict[str, Any]`) is converted to a Pydantic model:
 
 ```python
-def _row_to_task_response(row: dict[str, Any]) -> TaskResponse:
-    """Convert a DB task row dict to a TaskResponse."""
-    depends_on = json.loads(row.get("depends_on", "[]") or "[]")
-    return TaskResponse(
-        id=row["id"],
-        task_key=row["task_key"],
-        title=row["title"],
-        status=row["status"],
-        phase=row["phase"],
-        sequence=row["sequence"],
-        goal=row.get("goal"),
-        test_file=row.get("test_file"),
-        impl_file=row.get("impl_file"),
-        complexity=row.get("complexity", "medium"),
-        depends_on=depends_on,
-        claimed_by=row.get("claimed_by"),
-        created_at=row.get("created_at"),
-        updated_at=row.get("updated_at"),
-    )
+# Per Q9 verdict: Use model_validate instead of explicit converters.
+# JSON-encoded fields (depends_on, acceptance_criteria, module_exports)
+# are handled by @field_validator(mode="before") on the Pydantic models.
+task = TaskResponse.model_validate(row)
 ```
 
 **Imports from:** `...database`, `..dependencies`, `..models.*`, `..sse`
@@ -1054,7 +1039,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_server(
-    host: str = "0.0.0.0",
+    host: str = "127.0.0.1",
     port: int = 8420,
     db_path: str | None = None,
     reload: bool = False,
@@ -1132,7 +1117,7 @@ dev = [
 
 ```python
 @cli.command()
-@click.option("--host", default="0.0.0.0", help="Bind address")
+@click.option("--host", default="127.0.0.1", help="Bind address")
 @click.option("--port", default=8420, help="Bind port")
 @click.option("--db", type=click.Path(), help="Database path")
 @click.option("--reload", is_flag=True, help="Enable auto-reload (development)")
@@ -1350,13 +1335,13 @@ async def get_all_workers(self) -> list[dict[str, Any]]:
 
 ### `src/tdd_orchestrator/hooks.py`
 
-**What:** Add SSE event publishing to the post_tool_use_hook and stop_hook so that state changes are broadcast to SSE subscribers.
+**What:** Wire the SSE broadcaster reference for the database-level observer pattern. The actual event publishing happens via callbacks registered on DB mixin classes (see Q5 verdict). hooks.py retains its existing SDK tool use interception role.
 
-**Where:** At the module level, add a reference to the broadcaster. In `post_tool_use_hook`, publish events after detecting state changes.
+**Where:** At the module level, add a reference to the broadcaster. This reference is passed to `db.register_status_callback()` during API startup.
 
 **Change:**
 
-1. Add broadcaster integration at module level (~10 lines):
+1. Add broadcaster reference at module level (~10 lines):
 
 ```python
 # SSE integration (set when API server is running)
@@ -1366,24 +1351,19 @@ _broadcaster: Any = None
 def set_sse_broadcaster(broadcaster: Any) -> None:
     """Set the SSE broadcaster for event publishing.
 
-    Called by the API layer during startup. When not set (CLI-only mode),
-    events are simply not published.
+    Called by the API layer during startup. The broadcaster is then
+    registered as a callback on DB mixin classes for mutation events.
     """
     global _broadcaster
     _broadcaster = broadcaster
 
 
-async def _publish_sse_event(event_type: str, data: dict[str, Any]) -> None:
-    """Publish an event to the SSE broadcaster if available."""
-    if _broadcaster is not None:
-        await _broadcaster.publish(event_type, data)
+def get_sse_broadcaster() -> Any:
+    """Get the SSE broadcaster if available (for registration on DB callbacks)."""
+    return _broadcaster
 ```
 
-2. In `post_tool_use_hook`, after detecting relevant events, call `_publish_sse_event` (~15 lines of additions, woven into existing conditionals).
-
-3. In `stop_hook`, publish a `run_completed` event when stopping.
-
-**Existing code to reuse:** The `stop_hook` already queries `db.get_stats()`. We reuse that data as the SSE event payload.
+2. No changes to `post_tool_use_hook` or `stop_hook` — event publishing is handled by DB-level callbacks, not hook interception (per Q5 verdict).
 
 ---
 
@@ -1412,29 +1392,30 @@ All models defined in Section 2 under `models/responses.py` and `models/requests
 
 ### Mapping from DB Rows to Pydantic
 
-DB rows are `dict[str, Any]` (from `aiosqlite.Row` via `dict(row)`). The mapping is explicit in converter functions, not implicit via `model_validate`:
+DB rows are `dict[str, Any]` (from `aiosqlite.Row` via `dict(row)`). Per Q9 verdict, mapping uses Pydantic v2's `model_validate()` with `@field_validator(mode="before")` for JSON-encoded fields:
 
 ```python
-# In routes/tasks.py
-def _row_to_task_response(row: dict[str, Any]) -> TaskResponse:
-    """Convert a DB task row dict to a TaskResponse.
+# In api/models/responses.py — JSON field validators
+class TaskResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
 
-    Handles JSON-encoded fields (depends_on, acceptance_criteria, module_exports)
-    by parsing them from strings to lists.
-    """
-    depends_on = json.loads(row.get("depends_on") or "[]")
-    return TaskResponse(
-        id=row["id"],
-        task_key=row["task_key"],
-        ...
-    )
+    # ... fields ...
+    depends_on: list[str] = Field(default_factory=list)
+
+    @field_validator("depends_on", mode="before")
+    @classmethod
+    def parse_json_list(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return json.loads(v) if v else []
+        return v or []
 ```
 
-This pattern:
-- Makes the mapping visible and testable
-- Handles JSON-encoded columns (`depends_on`, `acceptance_criteria`, `module_exports`)
-- Handles `None` vs missing keys safely
-- Avoids coupling Pydantic model field names to DB column names
+This pattern (per Q9 verdict):
+- Eliminates ~400-600 lines of converter boilerplate across 16 models
+- Co-locates JSON parsing logic with the field definition (high cohesion)
+- Handles `None` vs missing keys via Pydantic defaults
+- Works because DB column names match Pydantic field names
+- JSON-encoded columns parsed by `@field_validator(mode="before")`
 
 ### JSON-Encoded Columns
 
@@ -1536,14 +1517,21 @@ For events that originate from DB operations (like `update_task_status`), there 
 
 **Alternative considered:** Database triggers or callback registration on `OrchestratorDB`. Rejected because it would couple the DB layer to the event system and complicate testing.
 
-For circuit breaker events specifically, the `MetricsCollector` already has a callback mechanism (`register_callback`). We register an SSE-publishing callback during app startup:
+For circuit breaker events specifically, the `MetricsCollector` already has a callback mechanism (`register_callback`). Per Q10 verdict, we reuse this for Phase 1 with the constraint that the adapter lives in the API layer:
 
 ```python
-# In dependencies.py init_dependencies():
+# In api/sse_bridge.py (NOT in core modules):
 from ..metrics import get_metrics_collector
 
-collector = get_metrics_collector()
-collector.register_callback(lambda metric: _publish_metric_as_sse(metric, broadcaster))
+def wire_circuit_breaker_sse(broadcaster: SSEBroadcaster) -> None:
+    """Register MetricsCollector callback to publish circuit events to SSE.
+
+    Phase 1 approach. Migrate to dedicated EventBus in Phase 2 when
+    additional event sources need SSE or when from_state/reason fields
+    are required.
+    """
+    collector = get_metrics_collector()
+    collector.register_callback(lambda metric: _publish_metric_as_sse(metric, broadcaster))
 ```
 
 ---
@@ -1553,7 +1541,7 @@ collector.register_callback(lambda metric: _publish_metric_as_sse(metric, broadc
 ### Usage
 
 ```bash
-# Start server with defaults (0.0.0.0:8420)
+# Start server with defaults (127.0.0.1:8420)
 tdd-orchestrator serve
 
 # Custom host/port
@@ -1575,7 +1563,7 @@ The `serve` command is a Click command on the `cli` group. It uses a lazy import
 
 ```python
 @cli.command()
-@click.option("--host", default="0.0.0.0", help="Bind address (default: 0.0.0.0)")
+@click.option("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
 @click.option("--port", default=8420, help="Bind port (default: 8420)")
 @click.option("--db", type=click.Path(), help="Database path")
 @click.option("--reload", is_flag=True, help="Enable auto-reload (development)")
@@ -1589,7 +1577,7 @@ def serve(host: str, port: int, db: str | None, reload: bool, log_level: str) ->
     """Start the API server.
 
     Requires: pip install tdd-orchestrator[api]
-    Default: http://0.0.0.0:8420
+    Default: http://127.0.0.1:8420
     """
     try:
         from .api.serve import run_server
@@ -2002,6 +1990,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 
 **Strongest counterargument:** Making it optional adds import-guarding complexity in every file that touches the API layer. If the project is evolving toward always being a daemon (Phase 2+), the API layer will become the primary interface, making optionality a premature abstraction that creates maintenance overhead without serving real users.
 
+**VERDICT:** Keep optional — with sunset clause. **Confidence: MEDIUM.** The optional pattern is proven and the API module is cleanly isolated under `api/`. The added testing cost is manageable. **Would change if:** Phase 2 daemon work begins and API becomes the default entry point, more than 3 files outside `api/` require import guards, or CI matrix testing of both configurations becomes a recurring source of failures.
+
 ---
 
 ### Q2: SSE vs WebSocket for real-time events
@@ -2009,6 +1999,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 **Decision made:** Server-Sent Events (SSE) via `sse-starlette`.
 
 **Strongest counterargument:** WebSocket is bidirectional, allowing the dashboard to send commands (retry task, reset circuit) over the same connection instead of separate HTTP requests. SSE is unidirectional and requires separate HTTP calls for mutations. As the dashboard grows (Phase 3), the bidirectional channel becomes increasingly valuable, and migrating from SSE to WebSocket later means rewriting both server and client code.
+
+**VERDICT:** Keep SSE. **Confidence: HIGH.** The system's mutation surface is REST. Events are read-only broadcasts to 1-5 clients. SSE has built-in reconnection via `Last-Event-ID`, works through proxies without upgrade negotiation, and is simpler to implement. The "two transport" concern is moot — REST endpoints exist for mutations regardless. **Would change if:** Dashboard requires sub-100ms interactive command loops, client-driven event filtering becomes essential, or concurrent clients exceed ~50.
 
 ---
 
@@ -2018,6 +2010,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 
 **Strongest counterargument:** This creates parallel model hierarchies that must be kept in sync. If `TaskResponse` diverges from the DB schema silently, clients get stale data. A single source of truth (making the domain models Pydantic-based) would eliminate the conversion layer entirely and guarantee consistency, at the cost of adding pydantic as a core dependency.
 
+**VERDICT:** Keep separate models. **Confidence: HIGH.** This is a pip-installable library first, API second. The API is an optional layer (`[api]` extra). Forcing Pydantic into core dependencies violates the project's dependency-isolation principle. The staleness risk is managed by a `test_api_models.py` that asserts API model fields match DB schema columns. **Would change if:** API becomes the primary interface and CLI/library usage becomes negligible — at that point, Pydantic moves to core deps and unified models eliminate the conversion layer.
+
 ---
 
 ### Q4: DB query methods on OrchestratorDB vs dedicated read-only query service
@@ -2025,6 +2019,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 **Decision made:** Add `get_tasks_filtered()`, `get_execution_runs()`, etc. directly to the existing mixin classes.
 
 **Strongest counterargument:** The mixin classes (`TaskMixin`, `RunsMixin`) mix read and write operations. API queries are purely read-only and should not share a write lock. A dedicated `QueryService` class with its own connection could use a read-only SQLite connection (`?mode=ro`) for better separation of concerns and potentially better concurrent read performance under WAL mode.
+
+**VERDICT:** Keep on existing mixins. **Confidence: HIGH.** Five methods across three established mixins is well within the pattern's capacity. The project enforces 800-line file limits, providing a natural extraction trigger. A separate read connection adds lifecycle management complexity not justified by the current load (1-5 clients + 1-3 workers). **Would change if:** API read methods grow past 10, observed write-lock contention during concurrent API + worker operations, or a second read consumer needs its own connection.
 
 ---
 
@@ -2034,6 +2030,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 
 **Strongest counterargument:** `hooks.py` hooks are designed for the Claude Agent SDK context (tool use interception). Task status changes made directly via DB methods (e.g., `db.update_task_status()` called from the API `retry` endpoint) bypass hooks entirely, creating a gap where SSE events are not published. A database-level callback pattern (e.g., `db.on_status_change(callback)`) would capture all mutations regardless of origin, providing more reliable event delivery.
 
+**VERDICT: OVERTURNED — Use database-level observer pattern.** **Confidence: HIGH.** The hooks-based approach has a structural gap: the API retry endpoint calls `db.update_task_status()` directly, bypassing hooks entirely. SSE subscribers would miss those events. Fix: add `_callbacks: list[Callable]` to `TaskMixin` with dispatch after `commit()` in `update_task_status()`. ~8 lines, follows the `MetricsCollector.register_callback()` precedent. hooks.py stays focused on Claude SDK tool use interception. **Would change if:** All mutations flow through SDK tool calls (making the gap theoretical).
+
 ---
 
 ### Q6: Default bind address 0.0.0.0 vs 127.0.0.1
@@ -2041,6 +2039,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 **Decision made:** Default to `0.0.0.0` (all interfaces) for convenience in local networks and Docker-less deployment.
 
 **Strongest counterargument:** Binding to `0.0.0.0` exposes the API to the local network by default, which is a security concern. Most users will run this on a development machine, and `127.0.0.1` (localhost only) is the safer default. Users who need network access can explicitly set `--host 0.0.0.0`. This follows the principle of least privilege.
+
+**VERDICT: OVERTURNED — Default to 127.0.0.1.** **Confidence: HIGH.** No auth in Phase 1 + mutation endpoints + developer laptops on untrusted networks = silent exposure risk. Failure mode of `127.0.0.1` is loud (connection refused, one-flag fix). Failure mode of `0.0.0.0` is silent (unintended network access). Docker users already expect to configure bind addresses. **Would change if:** Phase 1 ships with basic auth (token header), or tool becomes primarily container-deployed.
 
 ---
 
@@ -2050,6 +2050,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 
 **Strongest counterargument:** Creating a new app per test is slow because it initializes the DB schema each time. A shared app fixture with per-test transaction rollback would be faster and still provide isolation. The `create_app` factory approach also makes it harder to test interactions between requests (e.g., "create task then list tasks") because each request might hit a different DB state.
 
+**VERDICT:** Keep app-per-test. **Confidence: HIGH.** Schema init is ~5ms per test — 124 tests adds under 2 seconds. No ORM means no built-in transaction rollback; building a custom one introduces untested infrastructure. The existing 324-test suite validates this pattern at scale. Multi-request flows work fine within a single test (same app instance). **Would change if:** Schema init exceeds 200ms per test, or project adopts an ORM with built-in transaction rollback.
+
 ---
 
 ### Q8: Port 8420 as default
@@ -2057,6 +2059,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 **Decision made:** Use port `8420` as the default bind port.
 
 **Strongest counterargument:** Non-standard ports are hard to remember. Port `8000` is the Python convention (Django, uvicorn default, FastAPI docs). Using `8420` means every tutorial, script, and documentation example must include `--port 8420` or the non-standard URL. The risk of conflicts with Django is low for a TDD tool (users are unlikely to run both simultaneously), and if they do, `--port` is easily available.
+
+**VERDICT:** Keep port 8420. **Confidence: HIGH.** This tool is a companion process to web applications, not a web application itself. The target user is likely to have port 8000 in use. A clean first-run experience (no conflict) outweighs the minor cost of a non-standard port. The CLI prints the URL at startup for discoverability. **Would change if:** User research shows port conflicts are actually rare among the target audience.
 
 ---
 
@@ -2066,6 +2070,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 
 **Strongest counterargument:** Pydantic v2's `model_validate(dict_data)` with `model_config = ConfigDict(from_attributes=True)` can handle the conversion automatically. This eliminates boilerplate converter functions that are boring to write and easy to forget updating when the schema changes. The JSON-encoded fields (`depends_on`, `acceptance_criteria`) can be handled with Pydantic validators (`@field_validator`) that parse JSON strings.
 
+**VERDICT: OVERTURNED — Use model_validate with @field_validator.** **Confidence: HIGH.** With 16 models and matching column/field names, explicit converters are pure duplication (~400-600 lines of boilerplate). JSON-encoded columns are handled by `@field_validator(mode="before")` — 3-4 lines each, co-located with the field. Eliminates an entire category of drift bugs (forgetting to update converter when model changes). **Would change if:** Column names diverge from field names, conversion logic grows complex enough to warrant its own test suite, or Pydantic's `model_validate` produces mypy `Any` leaks under strict mode.
+
 ---
 
 ### Q10: Where to publish circuit breaker SSE events
@@ -2073,6 +2079,8 @@ These are design decisions where legitimate alternatives exist. Each should be d
 **Decision made:** Register a callback on `MetricsCollector` to publish circuit breaker events to SSE.
 
 **Strongest counterargument:** `MetricsCollector` is a metrics system, not an event bus. Overloading it with SSE responsibilities violates single responsibility. A dedicated `EventBus` class that both the metrics collector and SSE broadcaster subscribe to would be cleaner. The circuit breaker classes (`StageCircuitBreaker`, `WorkerCircuitBreaker`) should publish events to the event bus directly in their `_transition_to_open`, `_transition_to_closed` methods.
+
+**VERDICT:** MetricsCollector callbacks for Phase 1, migrate to EventBus in Phase 2. **Confidence: MEDIUM.** MetricsCollector callback works for MVP (~5 lines to wire). Constraint: callback adapter must live in API layer (`api/sse_bridge.py`), never in core modules. **Would change if:** A second event source needs SSE, SSE schema requires `from_state`/`reason` fields that MetricsCollector doesn't carry, or the callback reverse-engineering becomes fragile.
 
 ---
 
