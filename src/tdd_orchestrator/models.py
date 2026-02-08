@@ -4,7 +4,7 @@ This module defines the core data structures used throughout the TDD orchestrato
 including stage enumerations and result dataclasses for tracking pipeline execution.
 
 The TDD pipeline follows this stage progression:
-    RED -> GREEN -> VERIFY -> (FIX -> RE_VERIFY if needed)
+    RED -> GREEN -> VERIFY -> REFACTOR -> (FIX -> RE_VERIFY if needed)
 
 Each stage produces a StageResult that captures success/failure state,
 output, and any issues encountered during execution.
@@ -28,6 +28,7 @@ class Stage(Enum):
     - RED_FIX: Fix static review issues in RED stage tests
     - GREEN: Implement minimal code to make tests pass
     - VERIFY: Run pytest, ruff, and mypy to validate implementation
+    - REFACTOR: Improve code structure while keeping tests green
     - FIX: Address any issues found during verification
     - RE_VERIFY: Re-run verification after fixes applied
     """
@@ -36,6 +37,7 @@ class Stage(Enum):
     RED_FIX = "red_fix"
     GREEN = "green"
     VERIFY = "verify"
+    REFACTOR = "refactor"
     FIX = "fix"
     RE_VERIFY = "re_verify"
 
@@ -62,6 +64,22 @@ class StageResult:
     output: str
     error: str | None = None
     issues: list[dict[str, Any]] | None = None
+
+
+@dataclass
+class RefactorResult:
+    """Result from pre-REFACTOR analysis."""
+
+    files_checked: int
+    files_refactored: int
+    issues_found: list[str]
+    lines_before: int
+    lines_after: int
+
+    @property
+    def had_changes(self) -> bool:
+        """Whether any files were refactored."""
+        return self.files_refactored > 0
 
 
 @dataclass

@@ -45,10 +45,11 @@ class TestStage:
         assert "verify" in stages
         assert "fix" in stages
         assert "re_verify" in stages
+        assert "refactor" in stages
 
     def test_stage_count(self) -> None:
-        """Test that Stage enum has exactly 6 stages."""
-        assert len(Stage) == 6
+        """Test that Stage enum has exactly 7 stages."""
+        assert len(Stage) == 7
 
 
 class TestVerifyResult:

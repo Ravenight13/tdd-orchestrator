@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS attempts (
 
     -- Stage identification
     stage TEXT NOT NULL
-        CHECK(stage IN ('red', 'red_fix', 'green', 'review', 'fix', 'verify', 're_verify', 'commit')),
+        CHECK(stage IN ('red', 'red_fix', 'green', 'review', 'fix', 'verify', 're_verify', 'refactor', 'commit')),
     attempt_number INTEGER NOT NULL,        -- 1, 2, 3... per stage
 
     -- Prompt tracking (for debugging and deduplication)

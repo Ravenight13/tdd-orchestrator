@@ -18,6 +18,7 @@ from ..git_coordinator import GitCoordinator
 from ..git_stash_guard import GitStashGuard
 from ..models import Stage, StageResult
 from ..prompt_builder import PromptBuilder
+from ..refactor_checker import check_needs_refactor
 from .circuit_breakers import RedFixAttemptTracker, StaticReviewCircuitBreaker
 from .config import (
     DEFAULT_GREEN_RETRY_TIMEOUT_SECONDS,
@@ -25,6 +26,7 @@ from .config import (
     HAS_AGENT_SDK,
     MAX_TEST_OUTPUT_SIZE,
     RED_STAGE_MODEL,
+    REFACTOR_MODEL,
     STAGE_TIMEOUTS,
     ClaudeAgentOptions,
     WorkerConfig,
@@ -34,6 +36,7 @@ from .config import (
 )
 from .git_ops import commit_stage, run_ruff_fix, squash_wip_commits
 from .review import run_static_review
+from .stage_verifier import verify_stage_result
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +231,8 @@ class Worker:
     async def _run_tdd_pipeline(self, task: dict[str, Any]) -> bool:
         """Run TDD pipeline via discrete stage prompts.
 
-        Pipeline: RED -> Static Review -> GREEN -> VERIFY -> (FIX -> RE_VERIFY if needed)
+        Pipeline: RED -> Static Review -> GREEN -> VERIFY -> REFACTOR (if needed)
+                  -> RE_VERIFY -> (FIX -> RE_VERIFY if needed)
         Returns True if all stages pass.
 
         Each successful stage is committed incrementally to preserve work,
@@ -332,34 +336,101 @@ class Worker:
 
         # Stage 3: VERIFY - Run quality checks
         result = await self._run_stage(Stage.VERIFY, task)
-        if result.success:
-            await commit_stage(
-                task_key, "VERIFY", f"feat({task_key}): complete - all checks pass", self.base_dir
-            )
-            return True
-
-        # Stage 4: FIX - Address issues (conditional)
-        if not result.issues:
-            logger.error("VERIFY failed but no issues provided")
-            return False
-
-        result = await self._run_stage(Stage.FIX, task, issues=result.issues)
         if not result.success:
-            return False
-        await commit_stage(
-            task_key, "FIX", f"wip({task_key}): FIX stage - issue fixes", self.base_dir
-        )
+            # Stage 4: FIX - Address issues (conditional)
+            if not result.issues:
+                logger.error("VERIFY failed but no issues provided")
+                return False
 
-        # Stage 5: RE_VERIFY - Final verification (conditional)
-        result = await self._run_stage(Stage.RE_VERIFY, task)
-        if result.success:
+            result = await self._run_stage(Stage.FIX, task, issues=result.issues)
+            if not result.success:
+                return False
             await commit_stage(
-                task_key,
-                "RE_VERIFY",
+                task_key, "FIX", f"wip({task_key}): FIX stage - issue fixes", self.base_dir
+            )
+
+            # Stage 5: RE_VERIFY - Final verification (conditional)
+            result = await self._run_stage(Stage.RE_VERIFY, task)
+            if result.success:
+                await commit_stage(
+                    task_key,
+                    "RE_VERIFY",
+                    f"feat({task_key}): complete - all checks pass",
+                    self.base_dir,
+                )
+            return result.success
+
+        # Stage 3.5: REFACTOR (only if VERIFY passed)
+        impl_file = task.get("impl_file", "")
+        refactor_check = await check_needs_refactor(impl_file, self.base_dir)
+
+        if not refactor_check.needs_refactor:
+            # No refactoring needed - commit VERIFY and return success
+            await commit_stage(
+                task_key, "VERIFY",
                 f"feat({task_key}): complete - all checks pass",
                 self.base_dir,
             )
-        return result.success
+            return True
+
+        # REFACTOR needed
+        logger.info(
+            "[%s] REFACTOR triggered: %s",
+            task_key,
+            "; ".join(refactor_check.reasons),
+        )
+        result = await self._run_stage(
+            Stage.REFACTOR, task,
+            refactor_reasons=refactor_check.reasons,
+            model_override=REFACTOR_MODEL,
+        )
+        if not result.success:
+            # REFACTOR failed - still commit VERIFY and return success
+            # (REFACTOR is best-effort, not a gate)
+            logger.warning("[%s] REFACTOR stage failed, proceeding anyway", task_key)
+            await commit_stage(
+                task_key, "VERIFY",
+                f"feat({task_key}): complete - all checks pass",
+                self.base_dir,
+            )
+            return True
+
+        await commit_stage(
+            task_key, "REFACTOR",
+            f"wip({task_key}): REFACTOR - code cleanup",
+            self.base_dir,
+        )
+
+        # RE_VERIFY after REFACTOR
+        result = await self._run_stage(Stage.RE_VERIFY, task)
+        if result.success:
+            await commit_stage(
+                task_key, "RE_VERIFY",
+                f"feat({task_key}): complete - all checks pass",
+                self.base_dir,
+            )
+            return True
+
+        # REFACTOR broke something - enter FIX flow
+        if result.issues:
+            result = await self._run_stage(Stage.FIX, task, issues=result.issues)
+            if not result.success:
+                return False
+            await commit_stage(
+                task_key, "FIX",
+                f"wip({task_key}): FIX - post-refactor fixes",
+                self.base_dir,
+            )
+            result = await self._run_stage(Stage.RE_VERIFY, task)
+            if result.success:
+                await commit_stage(
+                    task_key, "RE_VERIFY",
+                    f"feat({task_key}): complete - all checks pass",
+                    self.base_dir,
+                )
+            return result.success
+
+        return False
 
     async def _run_stage(
         self,
@@ -653,107 +724,13 @@ class Worker:
     ) -> StageResult:
         """Verify stage completed successfully based on stage type.
 
-        Args:
-            stage: The TDD stage being verified.
-            task: Task dictionary with id, test_file, impl_file etc.
-            result_text: The output text from the stage execution.
-            skip_recording: If True, skip recording stage attempt (caller handles it).
-                           Used by _run_green_with_retry() to avoid duplicate recording.
-
-        Returns:
-            StageResult with success status and output.
+        Delegates to the standalone verify_stage_result() function in
+        stage_verifier.py, passing self.db and self.verifier as arguments.
         """
-        if stage == Stage.RED:
-            # RED succeeds if test file exists and pytest fails (expected)
-            test_file = task.get("test_file", "")
-            passed, output = await self.verifier.run_pytest(test_file)
-            # RED should FAIL (tests fail because no implementation)
-            success = not passed  # Inverted: pytest failing = RED success
-
-            # Record stage attempt
-            await self.db.record_stage_attempt(
-                task_id=task["id"],
-                stage=stage.value,
-                attempt_number=1,
-                success=success,
-                pytest_exit_code=0 if passed else 1,
-            )
-
-            return StageResult(stage=stage, success=success, output=output)
-
-        if stage == Stage.GREEN:
-            # GREEN succeeds if pytest passes
-            test_file = task.get("test_file", "")
-            passed, output = await self.verifier.run_pytest(test_file)
-
-            # Record stage attempt (unless caller handles it)
-            if not skip_recording:
-                await self.db.record_stage_attempt(
-                    task_id=task["id"],
-                    stage=stage.value,
-                    attempt_number=1,  # Will be dynamic in Phase 1
-                    success=passed,
-                    pytest_exit_code=0 if passed else 1,
-                )
-
-            return StageResult(stage=stage, success=passed, output=output)
-
-        if stage in (Stage.VERIFY, Stage.RE_VERIFY):
-            # VERIFY/RE_VERIFY succeeds if all tools pass
-            test_file = task.get("test_file", "")
-            impl_file = task.get("impl_file", "")
-            verify_result = await self.verifier.verify_all(test_file, impl_file)
-
-            issues: list[dict[str, Any]] = []
-            if not verify_result.pytest_passed:
-                issues.append({"tool": "pytest", "output": verify_result.pytest_output})
-            if not verify_result.ruff_passed:
-                issues.append({"tool": "ruff", "output": verify_result.ruff_output})
-            if not verify_result.mypy_passed:
-                issues.append({"tool": "mypy", "output": verify_result.mypy_output})
-
-            # Record stage attempt with all exit codes
-            await self.db.record_stage_attempt(
-                task_id=task["id"],
-                stage=stage.value,
-                attempt_number=1,
-                success=verify_result.all_passed,
-                pytest_exit_code=0 if verify_result.pytest_passed else 1,
-                ruff_exit_code=0 if verify_result.ruff_passed else 1,
-                mypy_exit_code=0 if verify_result.mypy_passed else 1,
-            )
-
-            return StageResult(
-                stage=stage,
-                success=verify_result.all_passed,
-                output=result_text,
-                issues=issues if issues else None,
-            )
-
-        if stage == Stage.FIX:
-            # FIX succeeds if no exceptions (actual verification in RE_VERIFY)
-
-            # Record stage attempt (no exit codes for FIX stage)
-            await self.db.record_stage_attempt(
-                task_id=task["id"],
-                stage=stage.value,
-                attempt_number=1,
-                success=True,
-            )
-
-            return StageResult(stage=stage, success=True, output=result_text)
-
-        if stage == Stage.RED_FIX:
-            # RED_FIX succeeds if no exceptions (actual verification in re-run of static review)
-            await self.db.record_stage_attempt(
-                task_id=task["id"],
-                stage=stage.value,
-                attempt_number=1,
-                success=True,
-            )
-            return StageResult(stage=stage, success=True, output=result_text)
-
-        return StageResult(stage=stage, success=False, output="", error="Unknown stage")
+        return await verify_stage_result(
+            stage, task, result_text, self.db, self.verifier,
+            skip_recording=skip_recording,
+        )
 
     async def _heartbeat_loop(self) -> None:
         """Send periodic heartbeats."""

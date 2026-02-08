@@ -19,6 +19,7 @@ STAGE_TIMEOUTS: dict[Stage, int] = {
     Stage.RED_FIX: 300,  # 5 min - fixing static review issues
     Stage.GREEN: 600,  # 10 min - implementing code to pass tests
     Stage.VERIFY: 60,  # 1 min - running quality checks
+    Stage.REFACTOR: 300,  # 5 min - improving code structure
     Stage.FIX: 300,  # 5 min - fixing issues
     Stage.RE_VERIFY: 60,  # 1 min - re-running quality checks
 }
@@ -43,6 +44,9 @@ ESCALATION_MODEL = "claude-opus-4-5-20251101"
 
 # RED stage always uses Opus (test accuracy is critical)
 RED_STAGE_MODEL = "claude-opus-4-5-20251101"
+
+# REFACTOR stage uses Opus (needs strong reasoning about code structure)
+REFACTOR_MODEL = "claude-opus-4-5-20251101"
 
 # Maximum test output size to include in retry prompts (prevents context overflow)
 MAX_TEST_OUTPUT_SIZE = 3000
