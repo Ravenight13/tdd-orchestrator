@@ -35,5 +35,8 @@ CLAUDE.local.md
 # Archive (pre-extraction snapshot)
 _orchestrator_archived/
 
+# Generated artifacts
+tdd-progress.md
+
 # OS
 .DS_Store

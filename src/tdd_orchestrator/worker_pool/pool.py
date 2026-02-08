@@ -8,14 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from ..database import OrchestratorDB
 from ..git_coordinator import GitCoordinator
 from ..merge_coordinator import MergeCoordinator
-from ..progress_writer import ProgressFileWriter
 from .config import PoolResult, WorkerConfig
 from .worker import Worker
 
@@ -47,11 +45,6 @@ class WorkerPool:
         self.merge = MergeCoordinator(base_dir, slack_webhook_url)
         self.workers: list[Worker] = []
         self.run_id: int = 0
-        self.progress_writer: ProgressFileWriter | None = None
-        if self.config.progress_file_enabled:
-            self.progress_writer = ProgressFileWriter(
-                db=db, output_path=Path(self.config.progress_file_path)
-            )
 
     async def run_parallel_phase(self, phase: int | None = None) -> PoolResult:
         """Run all tasks in a phase in parallel.
@@ -75,11 +68,6 @@ class WorkerPool:
         )
 
         try:
-            # Initialize progress writer with run_id
-            if self.progress_writer:
-                self.progress_writer.run_id = self.run_id
-                self.progress_writer.start_time = datetime.now()
-
             # Get claimable tasks for this phase
             tasks = await self.db.get_claimable_tasks(phase)
             if not tasks:
@@ -148,10 +136,6 @@ class WorkerPool:
                         result.tasks_completed += 1
                     else:
                         result.tasks_failed += 1
-
-                # Update progress file after each batch of tasks
-                if self.progress_writer:
-                    await self.progress_writer.update()
 
                 # Stop on any failure (100% success required)
                 if result.tasks_failed > 0:

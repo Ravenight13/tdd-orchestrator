@@ -49,7 +49,6 @@ src/tdd_orchestrator/
 ├── git_coordinator.py      # Git operations
 ├── git_stash_guard.py      # Stash safety
 ├── merge_coordinator.py    # Branch merging
-├── progress_writer.py      # Progress output
 └── task_loader.py          # Task file loading
 tests/
 ├── unit/                   # Fast, in-memory DB tests

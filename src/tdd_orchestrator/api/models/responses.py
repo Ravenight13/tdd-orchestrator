@@ -6,9 +6,16 @@ with automatic JSON deserialization for JSON-encoded database columns.
 
 import json
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    computed_field,
+    field_validator,
+)
 
 
 class TaskResponse(BaseModel):
@@ -210,3 +217,78 @@ class CircuitBreakerListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class HealthResponse(BaseModel):
+    """Response model for health check endpoint."""
+
+    status: Literal["ok", "degraded"]
+    version: str
+    uptime_seconds: float
+
+    @field_validator("status")
+    @classmethod
+    def validate_status_not_empty(cls, v: str) -> str:
+        """Ensure status is not empty."""
+        if not v:
+            raise ValueError("status cannot be empty")
+        return v
+
+
+class RunResponse(BaseModel):
+    """Response model for individual run information."""
+
+    run_id: str
+    status: Literal["pending", "running", "completed", "failed"]
+    created_at: str
+    task_count: int
+    progress: float | None = None
+
+
+class ProgressResponse(BaseModel):
+    """Response model for progress tracking."""
+
+    total_tasks: int = Field(ge=0)
+    completed_tasks: int = Field(ge=0)
+    failed_tasks: int = Field(ge=0)
+    pending_tasks: int = Field(ge=0)
+
+    @field_validator("total_tasks", "completed_tasks", "failed_tasks", "pending_tasks")
+    @classmethod
+    def validate_non_negative(cls, v: int) -> int:
+        """Ensure task counts are non-negative."""
+        if v < 0:
+            raise ValueError("task count cannot be negative")
+        return v
+
+    @field_validator("pending_tasks")
+    @classmethod
+    def validate_task_sum(cls, v: int, info: ValidationInfo) -> int:
+        """Ensure completed + failed + pending equals total."""
+        if info.data:
+            total = info.data.get("total_tasks", 0)
+            completed = info.data.get("completed_tasks", 0)
+            failed = info.data.get("failed_tasks", 0)
+            if completed + failed + v != total:
+                raise ValueError("completed + failed + pending must equal total_tasks")
+        return v
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def completion_percentage(self) -> float:
+        """Calculate completion percentage."""
+        if self.total_tasks == 0:
+            return 0.0
+        return (self.completed_tasks / self.total_tasks) * 100.0
+
+
+class RunListResponse(BaseModel):
+    """Response model for list of runs."""
+
+    runs: list[RunResponse]
+
+
+class StatsResponse(BaseModel):
+    """Response model for statistics endpoint."""
+
+    pass
