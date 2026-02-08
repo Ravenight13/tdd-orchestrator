@@ -514,6 +514,34 @@ class TaskMixin:
             await self._conn.commit()
             return cursor.lastrowid or 0
 
+    async def update_task_test_file(self, task_id: int, test_file: str) -> bool:
+        """Update the test_file path for a task.
+
+        Used by file discovery to reconcile the actual test file location
+        after the RED stage creates it at a different path than expected.
+
+        Args:
+            task_id: The task's database ID.
+            test_file: New relative path to the test file.
+
+        Returns:
+            True if the task was updated, False if not found.
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return False
+
+        async with self._write_lock:
+            cursor = await self._conn.execute(
+                "UPDATE tasks SET test_file = ? WHERE id = ?",
+                (test_file, task_id),
+            )
+            await self._conn.commit()
+            updated = cursor.rowcount > 0
+            if updated:
+                logger.info("Task %d test_file updated to %s", task_id, test_file)
+            return updated
+
     # =========================================================================
     # Stale Recovery (task-related)
     # =========================================================================

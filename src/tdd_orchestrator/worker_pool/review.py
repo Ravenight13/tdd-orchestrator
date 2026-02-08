@@ -51,6 +51,19 @@ async def run_static_review(
     test_file = task.get("test_file", "")
     task_key = task.get("task_key", "UNKNOWN")
 
+    # Guard: skip review entirely if test_file is empty
+    if not test_file:
+        logger.warning("[%s] No test_file specified - skipping static review", task_key)
+        return ASTCheckResult(violations=[], file_path="")
+
+    # Guard: skip review if test file doesn't exist on disk
+    test_path = base_dir / test_file
+    if not test_path.exists():
+        logger.warning(
+            "[%s] Test file not found at %s - skipping static review", task_key, test_path
+        )
+        return ASTCheckResult(violations=[], file_path=test_file)
+
     # Check circuit breaker - skip static review if disabled
     if not circuit_breaker.is_enabled():
         remaining = 0.0

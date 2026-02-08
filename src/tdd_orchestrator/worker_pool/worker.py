@@ -34,6 +34,7 @@ from .config import (
     sdk_query,
     set_model_for_complexity,
 )
+from .file_discovery import discover_test_file
 from .git_ops import commit_stage, run_ruff_fix, squash_wip_commits
 from .review import run_static_review
 from .stage_verifier import verify_stage_result
@@ -265,6 +266,20 @@ class Worker:
             await commit_stage(
                 task_key, "RED", f"wip({task_key}): RED stage - failing tests", self.base_dir
             )
+
+            # Post-RED: verify test file exists at expected path, reconcile if needed
+            if test_file:
+                actual = await discover_test_file(test_file, self.base_dir)
+                if actual is None:
+                    logger.error("[%s] Test file not found after RED: %s", task_key, test_file)
+                    return False
+                if actual != test_file:
+                    logger.info(
+                        "[%s] Test file relocated: %s -> %s", task_key, test_file, actual
+                    )
+                    task["test_file"] = actual
+                    test_file = actual
+                    await self.db.update_task_test_file(task["id"], actual)
 
             # Stage 1.5: Static RED Review (PLAN12)
             fix_tracker = RedFixAttemptTracker()

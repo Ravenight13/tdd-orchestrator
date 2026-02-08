@@ -26,6 +26,20 @@ logger = logging.getLogger(__name__)
 # Default timeout for subprocess execution (30 seconds)
 DEFAULT_TIMEOUT_SECONDS = 30
 
+_PYTHON_EXTENSIONS = (".py", ".pyi")
+
+
+def _is_python_file(path: str) -> bool:
+    """Check if a file path has a Python extension.
+
+    Args:
+        path: File path string.
+
+    Returns:
+        True if the file ends with .py or .pyi.
+    """
+    return path.endswith(_PYTHON_EXTENSIONS)
+
 
 class CodeVerifier:
     """Run external verification tools and capture output.
@@ -79,6 +93,9 @@ class CodeVerifier:
         Returns:
             Tuple of (passed, output) where passed is True if exit code is 0.
         """
+        if not _is_python_file(impl_file):
+            return True, "Skipped: non-Python file"
+
         impl_path = self._resolve_path(impl_file)
         logger.debug("Running ruff check on %s", impl_path)
 
@@ -93,6 +110,9 @@ class CodeVerifier:
         Returns:
             Tuple of (passed, output) where passed is True if exit code is 0.
         """
+        if not _is_python_file(impl_file):
+            return True, "Skipped: non-Python file"
+
         impl_path = self._resolve_path(impl_file)
         logger.debug("Running mypy on %s", impl_path)
 
@@ -107,6 +127,9 @@ class CodeVerifier:
         Returns:
             ASTCheckResult containing all violations found.
         """
+        if not _is_python_file(impl_file):
+            return ASTCheckResult(violations=[], file_path=impl_file)
+
         impl_path = self._resolve_path(impl_file)
         logger.debug("Running AST checks on %s", impl_path)
 
@@ -127,21 +150,28 @@ class CodeVerifier:
         """
         logger.info("Running all verification tools for test=%s, impl=%s", test_file, impl_file)
 
-        # Run all tools in parallel
-        pytest_task = self.run_pytest(test_file)
-        ruff_task = self.run_ruff(impl_file)
-        mypy_task = self.run_mypy(impl_file)
-        ast_task = self.run_ast_checks(impl_file)
+        is_python = _is_python_file(impl_file)
 
-        results = await asyncio.gather(
-            pytest_task, ruff_task, mypy_task, ast_task, return_exceptions=True
-        )
-
-        # Handle results, converting exceptions to failed results
-        pytest_result = self._handle_result(results[0], "pytest")
-        ruff_result = self._handle_result(results[1], "ruff")
-        mypy_result = self._handle_result(results[2], "mypy")
-        ast_result = self._handle_ast_result(results[3], impl_file)
+        if is_python:
+            # Run all tools in parallel
+            results = await asyncio.gather(
+                self.run_pytest(test_file),
+                self.run_ruff(impl_file),
+                self.run_mypy(impl_file),
+                self.run_ast_checks(impl_file),
+                return_exceptions=True,
+            )
+            pytest_result = self._handle_result(results[0], "pytest")
+            ruff_result = self._handle_result(results[1], "ruff")
+            mypy_result = self._handle_result(results[2], "mypy")
+            ast_result = self._handle_ast_result(results[3], impl_file)
+        else:
+            # Non-Python impl: only run pytest on the test file
+            pytest_raw = await self.run_pytest(test_file)
+            pytest_result = pytest_raw
+            ruff_result = (True, "Skipped: non-Python file")
+            mypy_result = (True, "Skipped: non-Python file")
+            ast_result = ASTCheckResult(violations=[], file_path=impl_file)
 
         verify_result = VerifyResult(
             pytest_passed=pytest_result[0],

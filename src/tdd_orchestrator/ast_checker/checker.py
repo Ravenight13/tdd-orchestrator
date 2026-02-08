@@ -60,6 +60,10 @@ class ASTQualityChecker:
         """
         logger.debug("Running AST checks on %s", file_path)
 
+        # Guard: skip non-Python files (defense-in-depth)
+        if file_path.suffix not in (".py", ".pyi"):
+            return ASTCheckResult(violations=[], file_path=str(file_path))
+
         try:
             source = file_path.read_text(encoding="utf-8")
         except OSError as e:

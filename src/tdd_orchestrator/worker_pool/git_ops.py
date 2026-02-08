@@ -24,6 +24,9 @@ async def run_ruff_fix(impl_file: str, task_key: str, base_dir: Path) -> bool:
     Returns:
         True if ruff ran successfully, False otherwise.
     """
+    if not impl_file.endswith((".py", ".pyi")):
+        return True
+
     try:
         proc = await asyncio.create_subprocess_exec(
             "uv",

@@ -53,6 +53,10 @@ async def check_needs_refactor(
         RefactorCheck with needs_refactor flag and list of reasons.
     """
     cfg = config or RefactorCheckConfig()
+
+    if not impl_file.endswith((".py", ".pyi")):
+        return RefactorCheck(needs_refactor=False)
+
     file_path = base_dir / impl_file
 
     # Graceful degradation for missing files
