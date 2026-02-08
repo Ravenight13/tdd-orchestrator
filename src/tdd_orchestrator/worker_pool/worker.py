@@ -474,7 +474,7 @@ class Worker:
             StageResult with success status and output.
         """
         # Build prompt for this stage
-        prompt = PromptBuilder.build(stage, task, **kwargs)
+        prompt = PromptBuilder.build(stage, task, base_dir=self.base_dir, **kwargs)
 
         # Verify SDK is available
         if not HAS_AGENT_SDK or sdk_query is None or ClaudeAgentOptions is None:

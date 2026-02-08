@@ -1,7 +1,8 @@
-"""Unit tests for PromptBuilder — REFACTOR stage prompts."""
+"""Unit tests for PromptBuilder — REFACTOR stage and absolute path prompts."""
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -49,3 +50,55 @@ def test_build_refactor_missing_reasons_raises(task: dict[str, Any]) -> None:
     """build(Stage.REFACTOR) without refactor_reasons raises ValueError."""
     with pytest.raises(ValueError, match="refactor_reasons"):
         PromptBuilder.build(Stage.REFACTOR, task)
+
+
+# ---------------------------------------------------------------------------
+# RED / GREEN absolute path tests
+# ---------------------------------------------------------------------------
+
+_BASE_DIR = Path("/Users/dev/Projects/tdd_orchestrator")
+
+
+def test_red_prompt_includes_absolute_path_when_base_dir_provided(task: dict[str, Any]) -> None:
+    """red() with base_dir embeds the absolute test file path."""
+    result = PromptBuilder.red(task, base_dir=_BASE_DIR)
+    expected = str(_BASE_DIR / task["test_file"])
+    assert expected in result
+
+
+def test_red_prompt_falls_back_to_relative_when_no_base_dir(task: dict[str, Any]) -> None:
+    """red() without base_dir uses the relative test file path."""
+    result = PromptBuilder.red(task)
+    # The relative path should appear but not as an absolute path
+    assert task["test_file"] in result
+    assert str(_BASE_DIR) not in result
+
+
+def test_green_prompt_includes_absolute_path_when_base_dir_provided(
+    task: dict[str, Any],
+) -> None:
+    """green() with base_dir embeds the absolute impl file path."""
+    result = PromptBuilder.green(task, "test output", base_dir=_BASE_DIR)
+    expected = str(_BASE_DIR / task["impl_file"])
+    assert expected in result
+
+
+def test_green_prompt_falls_back_to_relative_when_no_base_dir(task: dict[str, Any]) -> None:
+    """green() without base_dir uses the relative impl file path."""
+    result = PromptBuilder.green(task, "test output")
+    assert task["impl_file"] in result
+    assert str(_BASE_DIR) not in result
+
+
+def test_build_passes_base_dir_to_red(task: dict[str, Any]) -> None:
+    """build(RED) forwards base_dir to red()."""
+    result = PromptBuilder.build(Stage.RED, task, base_dir=_BASE_DIR)
+    expected = str(_BASE_DIR / task["test_file"])
+    assert expected in result
+
+
+def test_build_passes_base_dir_to_green(task: dict[str, Any]) -> None:
+    """build(GREEN) forwards base_dir to green()."""
+    result = PromptBuilder.build(Stage.GREEN, task, test_output="failures", base_dir=_BASE_DIR)
+    expected = str(_BASE_DIR / task["impl_file"])
+    assert expected in result

@@ -151,7 +151,8 @@ RED_PROMPT_TEMPLATE = """You are a test writer. Your ONLY job is to write pytest
 {static_review_instructions}
 
 ## IMPORTANT
-- ONLY create the test file at the EXACT path: {test_file}
+- ONLY create the test file using the Write tool at this EXACT absolute path: {test_file_abs}
+- Do NOT modify this path. Do NOT use a relative path. Use EXACTLY: {test_file_abs}
 - Do NOT write any implementation code
 - Do NOT create any other files
 - Tests should fail with ImportError or NameError (function doesn't exist)
@@ -179,13 +180,12 @@ GREEN_PROMPT_TEMPLATE = """You are an implementer. Your ONLY job is to make the 
 ## OUTPUT FILE (EXACT PATH REQUIRED)
 You MUST create the implementation file at EXACTLY this path:
 
-**Full path**: `{impl_file}`
+**Full absolute path**: `{impl_file_abs}`
 
 ⚠️ CRITICAL:
-- Use the EXACT path shown above with the Write tool
-- Do NOT modify the path in any way
+- Use this EXACT absolute path with the Write tool: {impl_file_abs}
+- Do NOT modify this path -- use the absolute path shown above
 - Do NOT create subdirectories or packages
-- The path is relative to the repository root
 {module_exports_section}
 {file_structure_constraint}
 

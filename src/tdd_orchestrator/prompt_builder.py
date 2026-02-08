@@ -16,6 +16,7 @@ the LLM to produce predictable, verifiable outputs at each stage.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .prompt_templates import (
@@ -81,7 +82,7 @@ class PromptBuilder:
             return []
 
     @staticmethod
-    def red(task: dict[str, Any]) -> str:
+    def red(task: dict[str, Any], base_dir: Path | None = None) -> str:
         """Generate prompt for RED phase (write failing tests)."""
         criteria = PromptBuilder._parse_criteria(task.get("acceptance_criteria"))
         criteria_text = (
@@ -111,18 +112,22 @@ class PromptBuilder:
                 f"Do NOT import from submodules. Do NOT invent new export names.\n"
             )
 
+        test_file = task.get("test_file", "test_file.py")
+        test_file_abs = str(base_dir / test_file) if base_dir else test_file
+
         return RED_PROMPT_TEMPLATE.format(
             goal=task.get("goal", "No goal specified"),
             criteria_text=criteria_text,
             module_exports_section=module_exports_section,
-            test_file=task.get("test_file", "test_file.py"),
+            test_file=test_file,
             impl_file=impl_file,
             import_hint=import_hint,
             static_review_instructions=STATIC_REVIEW_INSTRUCTIONS,
+            test_file_abs=test_file_abs,
         )
 
     @staticmethod
-    def green(task: dict[str, Any], test_output: str) -> str:
+    def green(task: dict[str, Any], test_output: str, base_dir: Path | None = None) -> str:
         """Generate prompt for GREEN phase (write implementation)."""
         truncated_output = test_output[:3000] if test_output else "No test output available"
 
@@ -148,11 +153,14 @@ class PromptBuilder:
                 f"- If multiple classes, define them all in the single file\n"
             )
 
+        impl_file_abs = str(base_dir / impl_file) if base_dir else impl_file
+
         return GREEN_PROMPT_TEMPLATE.format(
             goal=task.get("goal", "No goal specified"),
             test_file=task.get("test_file", "test_file.py"),
             truncated_output=truncated_output,
             impl_file=impl_file,
+            impl_file_abs=impl_file_abs,
             module_exports_section=module_exports_section,
             file_structure_constraint=FILE_STRUCTURE_CONSTRAINT,
             type_annotation_instructions=TYPE_ANNOTATION_INSTRUCTIONS,
@@ -249,8 +257,10 @@ class PromptBuilder:
         """Dispatcher method to build prompts for any stage."""
         from .models import Stage as StageEnum
 
+        base_dir: Path | None = kwargs.pop("base_dir", None)
+
         if stage == StageEnum.RED:
-            return PromptBuilder.red(task)
+            return PromptBuilder.red(task, base_dir=base_dir)
 
         if stage == StageEnum.GREEN:
             test_output = kwargs.get("test_output")
@@ -262,7 +272,7 @@ class PromptBuilder:
             if attempt > 1:
                 previous_failure = kwargs.get("previous_failure", "")
                 return PromptBuilder.build_green_retry(task, test_output, attempt, previous_failure)
-            return PromptBuilder.green(task, test_output)
+            return PromptBuilder.green(task, test_output, base_dir=base_dir)
 
         if stage == StageEnum.VERIFY or stage == StageEnum.RE_VERIFY:
             return PromptBuilder.verify(task)
