@@ -26,7 +26,7 @@ CONFIG_BOUNDS: dict[str, tuple[int, int]] = {
 }
 
 # Default database path
-DEFAULT_DB_PATH = Path(__file__).parent.parent / "orchestrator.db"
+DEFAULT_DB_PATH = Path.cwd() / "orchestrator.db"
 
 
 class ConnectionMixin:
@@ -41,7 +41,7 @@ class ConnectionMixin:
 
         Args:
             db_path: Path to SQLite database file. Use ":memory:" for testing.
-                     Defaults to orchestrator.db in this module's directory.
+                     Defaults to orchestrator.db in the current working directory.
         """
         if db_path is None:
             self.db_path = DEFAULT_DB_PATH

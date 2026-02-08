@@ -22,7 +22,7 @@ class OrchestratorDB(ConnectionMixin, TaskMixin, WorkerMixin, RunsMixin):
     including task state transitions, attempt tracking, and statistics.
 
     Usage:
-        async with OrchestratorDB("tasks.db") as db:
+        async with OrchestratorDB() as db:
             task = await db.get_next_pending_task()
             if task:
                 await db.update_task_status(task["task_key"], "in_progress")
@@ -33,7 +33,7 @@ class OrchestratorDB(ConnectionMixin, TaskMixin, WorkerMixin, RunsMixin):
 
         Args:
             db_path: Path to SQLite database file. Use ":memory:" for testing.
-                     Defaults to orchestrator.db in this module's directory.
+                     Defaults to orchestrator.db in the current working directory.
         """
         super().__init__(db_path)
 

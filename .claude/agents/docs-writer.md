@@ -75,7 +75,7 @@ SQLite persistence layer with async access and optimistic locking.
 ```python
 from tdd_orchestrator import OrchestratorDB
 
-async with OrchestratorDB("tasks.db") as db:
+async with OrchestratorDB() as db:
     await db.initialize()
     tasks = await db.get_ready_tasks()
 ```
@@ -119,7 +119,7 @@ tdd-orchestrator run [OPTIONS]
 tdd-orchestrator run -p -w 3
 
 # Run with custom database
-tdd-orchestrator run --db /path/to/tasks.db
+tdd-orchestrator run --db /path/to/orchestrator.db
 ```
 ```
 

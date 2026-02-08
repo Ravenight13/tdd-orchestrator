@@ -10,33 +10,22 @@ Tests use real SQLite database (in-memory) to verify:
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
 
-# Use relative import to match project structure
-from tdd_orchestrator.database import OrchestratorDB
-
-if TYPE_CHECKING:
-    pass
-
-
-@pytest.fixture
-def schema_path() -> Path:
-    """Get path to schema.sql."""
-    return Path(__file__).resolve().parent.parent.parent / "schema" / "schema.sql"
+from tdd_orchestrator.database import OrchestratorDB, SCHEMA_PATH
 
 
 @pytest_asyncio.fixture
-async def db(schema_path: Path) -> AsyncGenerator[OrchestratorDB, None]:
+async def db() -> AsyncGenerator[OrchestratorDB, None]:
     """Create in-memory database with schema."""
     database = OrchestratorDB(":memory:")
     await database.connect()
 
     # Load schema
-    schema_sql = schema_path.read_text()
+    schema_sql = SCHEMA_PATH.read_text()
     # Split by semicolon and execute each statement
     for statement in schema_sql.split(";"):
         statement = statement.strip()

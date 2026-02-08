@@ -5,7 +5,7 @@
 All database and worker operations MUST be async. Use `async def` and `await` consistently.
 
 ```python
-async with OrchestratorDB("tasks.db") as db:
+async with OrchestratorDB() as db:
     tasks = await db.get_ready_tasks()
 ```
 
