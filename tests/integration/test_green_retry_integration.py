@@ -63,6 +63,10 @@ class TestGreenRetryIntegration:
             config = WorkerConfig(single_branch_mode=True)
             worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
+            # Create test file so discover_test_file finds it
+            (tmp_path / "tests").mkdir()
+            (tmp_path / "tests" / "test_retry.py").write_text("def test_placeholder(): pass\n")
+
             # Track pytest calls to simulate RED, GREEN attempt 1 (fail), GREEN attempt 2 (pass)
             pytest_calls = {"count": 0}
 
@@ -155,6 +159,10 @@ class TestGreenRetryIntegration:
             config = WorkerConfig(single_branch_mode=True)
             worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
+            # Create test file so discover_test_file finds it
+            (tmp_path / "tests").mkdir()
+            (tmp_path / "tests" / "test_simple.py").write_text("def test_placeholder(): pass\n")
+
             # Track pytest calls: RED fail, GREEN pass
             pytest_calls = {"count": 0}
 
@@ -240,6 +248,10 @@ class TestGreenRetryIntegration:
             config = WorkerConfig(single_branch_mode=True)
             worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
+            # Create test file so discover_test_file finds it
+            (tmp_path / "tests").mkdir()
+            (tmp_path / "tests" / "test_fail.py").write_text("def test_placeholder(): pass\n")
+
             # Mock verifier: RED succeeds, GREEN always fails
             async def mock_run_pytest(test_file: str) -> tuple[bool, str]:
                 # Check if we're in RED stage by looking at call count
@@ -322,6 +334,10 @@ class TestGreenRetryIntegration:
             mock_git = MagicMock()
             config = WorkerConfig(single_branch_mode=True)
             worker = Worker(1, db, mock_git, config, run_id, tmp_path)
+
+            # Create test file so discover_test_file finds it
+            (tmp_path / "tests").mkdir()
+            (tmp_path / "tests" / "test_commit.py").write_text("def test_placeholder(): pass\n")
 
             # Track pytest calls: RED fail, GREEN attempt 1 fail, GREEN attempt 2 pass
             pytest_calls = {"count": 0}

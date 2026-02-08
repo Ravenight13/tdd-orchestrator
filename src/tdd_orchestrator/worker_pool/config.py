@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ..models import Stage
 
@@ -24,12 +24,24 @@ STAGE_TIMEOUTS: dict[Stage, int] = {
     Stage.RE_VERIFY: 60,  # 1 min - re-running quality checks
 }
 
+# Stage-specific max_turns for SDK calls
+# Higher values for stages that need exploration (Glob, Read) + file creation (Write)
+STAGE_MAX_TURNS: dict[Stage, int] = {
+    Stage.RED: 25,  # Exploration + file creation
+    Stage.RED_FIX: 15,  # Targeted fixes
+    Stage.GREEN: 25,  # Exploration + implementation
+    Stage.VERIFY: 10,  # Run commands only
+    Stage.REFACTOR: 20,  # Read + restructure
+    Stage.FIX: 15,  # Targeted fixes
+    Stage.RE_VERIFY: 10,  # Run commands only
+}
+
 # Aggregate timeout for GREEN retry (all attempts combined)
 # Default 30 minutes; can be overridden via config 'max_green_retry_time_seconds'
 DEFAULT_GREEN_RETRY_TIMEOUT_SECONDS = 1800
 
 # Model selection based on task complexity (PLAN8)
-# Set via ANTHROPIC_MODEL env var before SDK calls
+# Passed directly to ClaudeAgentOptions.model
 MODEL_MAP: dict[str, str] = {
     "low": "claude-haiku-4-5-20251001",
     "medium": "claude-sonnet-4-5-20250929",
@@ -52,24 +64,17 @@ REFACTOR_MODEL = "claude-opus-4-5-20251101"
 MAX_TEST_OUTPUT_SIZE = 3000
 
 
-def set_model_for_complexity(complexity: str) -> str:
-    """Set ANTHROPIC_MODEL environment variable based on task complexity.
+def get_model_for_complexity(complexity: str) -> str:
+    """Return the model ID for a given task complexity level.
 
     Args:
         complexity: Task complexity level ("low", "medium", "high").
 
     Returns:
-        The model that was set.
+        The model ID string.
     """
-    import os
+    return MODEL_MAP.get(complexity, MODEL_MAP["medium"])
 
-    model = MODEL_MAP.get(complexity, MODEL_MAP["medium"])
-    os.environ["ANTHROPIC_MODEL"] = model
-    return model
-
-
-if TYPE_CHECKING:
-    pass
 
 # Agent SDK (optional - graceful degradation if not installed)
 # Define stub types first, then optionally override with real SDK
@@ -117,8 +122,6 @@ class WorkerConfig:
     use_local_branches: bool = False
     single_branch_mode: bool = False
     git_stash_enabled: bool = True
-    progress_file_enabled: bool = True
-    progress_file_path: str = "tdd-progress.md"
 
 
 @dataclass

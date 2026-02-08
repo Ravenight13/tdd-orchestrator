@@ -25,6 +25,7 @@ async def verify_stage_result(
     db: OrchestratorDB,
     verifier: CodeVerifier,
     *,
+    base_dir: Path,
     skip_recording: bool = False,
 ) -> StageResult:
     """Verify stage completed successfully based on stage type.
@@ -35,6 +36,7 @@ async def verify_stage_result(
         result_text: The output text from the stage execution.
         db: Database instance for recording attempts.
         verifier: Code verifier for running pytest/ruff/mypy.
+        base_dir: Root directory for resolving relative file paths.
         skip_recording: If True, skip recording stage attempt (caller handles it).
 
     Returns:
@@ -45,7 +47,7 @@ async def verify_stage_result(
         test_file = task.get("test_file", "")
 
         # Guard: test file must exist on disk before running pytest
-        if not test_file or not Path(test_file).exists():
+        if not test_file or not (base_dir / test_file).exists():
             logger.error("RED verification failed: test file not found: %s", test_file)
             await db.record_stage_attempt(
                 task_id=task["id"],

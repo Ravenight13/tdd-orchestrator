@@ -27,12 +27,13 @@ from .config import (
     MAX_TEST_OUTPUT_SIZE,
     RED_STAGE_MODEL,
     REFACTOR_MODEL,
+    STAGE_MAX_TURNS,
     STAGE_TIMEOUTS,
     ClaudeAgentOptions,
     WorkerConfig,
     WorkerStats,
+    get_model_for_complexity,
     sdk_query,
-    set_model_for_complexity,
 )
 from .file_discovery import discover_test_file
 from .git_ops import commit_stage, run_ruff_fix, squash_wip_commits
@@ -488,36 +489,31 @@ class Worker:
             logger.error("Invocation limit reached at stage %s", stage.value)
             return StageResult(stage=stage, success=False, output="", error="Budget exceeded")
 
-        # Set model based on task complexity (PLAN8) or use override
+        # Select model: stage overrides > caller override > complexity-based
         complexity = task.get("complexity", "medium")
 
-        # Always use Opus for RED stage (tests are specifications, must be accurate)
         if stage == Stage.RED:
-            model_override = RED_STAGE_MODEL
-
-        if model_override:
-            import os
-
-            os.environ["ANTHROPIC_MODEL"] = model_override
+            model = RED_STAGE_MODEL
+        elif model_override:
             model = model_override
-            logger.info(
-                "Worker %d: using model %s (override)",
-                self.worker_id,
-                model,
-            )
         else:
-            model = set_model_for_complexity(complexity)
-            logger.info(
-                "Worker %d: using model %s for complexity %s",
-                self.worker_id,
-                model,
-                complexity,
-            )
+            model = get_model_for_complexity(complexity)
+
+        logger.info(
+            "Worker %d: using model %s for stage %s (complexity=%s)",
+            self.worker_id,
+            model,
+            stage.value,
+            complexity,
+        )
 
         # Configure Agent SDK
         options = ClaudeAgentOptions(
             allowed_tools=["Bash", "Read", "Write", "Edit", "Glob", "Grep"],
-            max_turns=10,  # Fewer turns per stage (focused prompt)
+            max_turns=STAGE_MAX_TURNS.get(stage, 15),
+            permission_mode="bypassPermissions",
+            cwd=str(self.base_dir),
+            model=model,
         )
 
         # Get stage-specific timeout (default 5 min)
@@ -744,6 +740,7 @@ class Worker:
         """
         return await verify_stage_result(
             stage, task, result_text, self.db, self.verifier,
+            base_dir=self.base_dir,
             skip_recording=skip_recording,
         )
 

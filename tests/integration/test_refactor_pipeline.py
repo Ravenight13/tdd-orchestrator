@@ -96,6 +96,10 @@ class _PipelineHarness:
                 "tdd_orchestrator.worker_pool.worker.squash_wip_commits",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "tdd_orchestrator.worker_pool.worker.discover_test_file",
+                new_callable=AsyncMock, return_value="tests/test_ref.py",
+            ),
             patch.object(
                 self._worker, "_run_stage",
                 new_callable=AsyncMock, side_effect=self._stage_se,

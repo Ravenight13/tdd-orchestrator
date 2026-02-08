@@ -39,6 +39,11 @@ class TestTaskProcessing:
             config = WorkerConfig(single_branch_mode=True)
             worker = Worker(1, db, mock_git, config, run_id, tmp_path)
 
+            # Create test file so RED verification finds it
+            test_dir = tmp_path / "tests"
+            test_dir.mkdir()
+            (test_dir / "test_foo.py").write_text("def test_placeholder(): pass\n")
+
             # Mock verifier to return failing pytest (expected for RED stage)
             with patch.object(worker.verifier, "run_pytest", new_callable=AsyncMock) as mock_pytest:
                 mock_pytest.return_value = (False, "FAILED: ImportError")
