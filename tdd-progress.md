@@ -1,17 +1,17 @@
 # TDD Orchestrator Progress
 
-**Run ID**: 1
-**Started**: 2026-02-08 07:38:27
-**Last Updated**: 2026-02-08 07:40:57
+**Run ID**: 3
+**Started**: 2026-02-08 08:34:38
+**Last Updated**: 2026-02-08 08:35:50
 **Status**: Running
 
 ## Summary
 | Metric | Value |
 |--------|-------|
 | Total Tasks | 48 |
-| Completed | 0 |
-| Success Rate | 0% |
-| Estimated Completion | Calculating... |
+| Completed | 3 |
+| Success Rate | 75% |
+| Estimated Completion | 09:28:38 (~52 min) |
 
 ## Active Workers
 | Worker | Task | Stage | Duration |
@@ -20,19 +20,22 @@
 | Worker 2 | - | - | - |
 
 ## Recently Completed (Last 5)
-*No completed tasks yet*
+| Task | Title | Duration | Completed At |
+|------|-------|----------|--------------|
+| API-TDD-01-01 | Implement core response models (TaskResp... | 1m 12s | 14:35:50 |
+| API-TDD-0A-01 | Add [api] optional dependencies to pypro... | - | 13:41:58 |
+| API-TDD-0A-02 | Create src/tdd_orchestrator/api package ... | - | 13:41:58 |
 
 ## Blocked Tasks
 | Task | Title | Reason | Failed At |
 |------|-------|--------|-----------|
-| API-TDD-0A-01 | Add [api] optional dependencie... | Unknown error | 13:40:57 |
-| API-TDD-0A-02 | Create src/tdd_orchestrator/ap... | Unknown error | 13:40:22 |
+| API-TDD-01-02 | Implement list and detail resp... | Unknown error | 14:35:46 |
 
 ## Worker Statistics
 | Worker | Completed | Failed | Invocations |
 |--------|-----------|--------|-------------|
-| Worker 1 | 0 completed | 1 failed | 5 invocations |
-| Worker 2 | 0 completed | 1 failed | 3 invocations |
+| Worker 1 | 1 completed | 2 failed | 2 invocations |
+| Worker 2 | 0 completed | 3 failed | 1 invocations |
 
 ## Invocation Budget
-**Used**: 8/100 (8%)
+**Used**: 3/100 (3%)

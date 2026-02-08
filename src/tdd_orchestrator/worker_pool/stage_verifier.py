@@ -8,6 +8,7 @@ stage completion based on stage type, with no Worker instance dependency.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from ..code_verifier import CodeVerifier
@@ -42,6 +43,24 @@ async def verify_stage_result(
     if stage == Stage.RED:
         # RED succeeds if test file exists and pytest fails (expected)
         test_file = task.get("test_file", "")
+
+        # Guard: test file must exist on disk before running pytest
+        if not test_file or not Path(test_file).exists():
+            logger.error("RED verification failed: test file not found: %s", test_file)
+            await db.record_stage_attempt(
+                task_id=task["id"],
+                stage=stage.value,
+                attempt_number=1,
+                success=False,
+                pytest_exit_code=4,  # pytest exit code 4 = no tests collected
+            )
+            return StageResult(
+                stage=stage,
+                success=False,
+                output=f"Test file not found: {test_file}",
+                error="Test file not created by RED stage",
+            )
+
         passed, output = await verifier.run_pytest(test_file)
         # RED should FAIL (tests fail because no implementation)
         success = not passed  # Inverted: pytest failing = RED success

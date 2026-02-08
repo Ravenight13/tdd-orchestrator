@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tdd_orchestrator.database import OrchestratorDB
+    from .database import OrchestratorDB
 
 logger = logging.getLogger(__name__)
 
