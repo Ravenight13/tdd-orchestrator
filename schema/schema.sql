@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS execution_runs (
     total_invocations INTEGER DEFAULT 0,    -- API invocations in this run
     max_workers INTEGER,                    -- Max concurrent workers used
     status TEXT NOT NULL DEFAULT 'running'
-        CHECK(status IN ('running', 'completed', 'failed', 'cancelled'))
+        CHECK(status IN ('running', 'completed', 'failed', 'cancelled', 'passed'))
 );
 
 
