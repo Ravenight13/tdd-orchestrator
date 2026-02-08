@@ -21,6 +21,11 @@ dev = [
     "mypy>=1.18.2",
     "ruff>=0.13.1",
 ]
+api = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+]
 
 [project.scripts]
 tdd-orchestrator = "tdd_orchestrator.cli:main"
