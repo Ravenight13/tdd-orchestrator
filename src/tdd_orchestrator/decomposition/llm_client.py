@@ -292,7 +292,7 @@ class ClaudeAgentSDKClient(BaseLLMClient):
             LLMClientError: If the query fails or SDK not installed.
         """
         try:
-            from claude_agent_sdk import ClaudeAgentOptions, query  # type: ignore[import-not-found]
+            from claude_agent_sdk import ClaudeAgentOptions, query
 
             options = ClaudeAgentOptions(
                 tools=[],  # Explicitly disable ALL tools for JSON-only responses
@@ -304,7 +304,7 @@ class ClaudeAgentSDKClient(BaseLLMClient):
             # Only extract from AssistantMessage (skip SystemMessage and ResultMessage)
             # IMPORTANT: Explicitly close the generator to prevent CLI hang
             response_text = ""
-            generator = query(prompt=prompt, options=options)
+            generator: Any = query(prompt=prompt, options=options)
             try:
                 async for message in generator:
                     # Filter to assistant messages only (type checking)

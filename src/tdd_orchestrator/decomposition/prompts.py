@@ -106,16 +106,7 @@ FILE PATH RULES (CRITICAL):
 - The verification system checks for the EXACT file path - no variations allowed
 - Example: "src/auth/token_cache.py" is correct, "src/auth/token_cache/" is WRONG
 
-VALID PATH PREFIXES (use these only):
-- impl_file: "src/htmx/", "src/auth/", "src/config/", "src/extractors/", "src/salesforce/", "src/upload/", "src/pipeline/", "src/integration/", "src/frontend/htmx/"
-- test_file: "tests/unit/", "tests/integration/", "tests/acceptance/"
-
-INVALID PREFIXES (never use these):
-- "app/" (use "src/" instead)
-- "backend/tests/" (use "tests/" without backend prefix)
-- "backend/src/" (use "src/" without backend prefix)
-
-CRITICAL: If the Module Hint doesn't match a valid prefix, use "src/htmx/" as the default for HTMX-related tasks.
+{valid_path_prefixes}
 
 TEST TYPE CLASSIFICATION (CRITICAL):
 
@@ -132,23 +123,23 @@ UNIT TEST RULES (default):
 
 INTEGRATION TEST RULES:
 - test_file: "tests/integration/test_{{feature}}_{{aspect}}.py" (UNIQUE per task - no sharing)
-- impl_file: Point to EXISTING endpoint being tested (e.g., "src/htmx/upload_endpoint.py")
+- impl_file: Set EQUAL TO test_file (the test IS the deliverable for integration tasks)
 - estimated_tests: 3-8 (fewer but more complex tests)
 - MUST include "depends_on" array with task_keys of unit tests that create tested components
 - Auto-set complexity to "high"
 
 E2E TEST RULES:
 - test_file: "tests/e2e/test_{{user_flow}}.py" (UNIQUE per task)
-- impl_file: "tests/e2e/conftest.py" (shared fixtures only)
+- impl_file: Set EQUAL TO test_file (the test IS the deliverable for e2e tasks)
 - estimated_tests: 2-5 (fewest but most comprehensive)
 - MUST depend on multiple integration test tasks
 - Auto-set complexity to "high"
 
 ANTI-PATTERNS TO AVOID:
 - Multiple tasks sharing the same test_file (each task = unique test file)
-- Integration tests with impl_file pointing to non-existent modules
+- Integration tests with impl_file NOT equal to test_file
 - Integration tests without depends_on linking to related unit tests
-- Creating new src/ files in integration test impl_file (test existing code)
+- Creating src/ files in integration/e2e test impl_file (use test_file path instead)
 
 Return a JSON array of 3-5 atomic tasks. Each task should have:
 - title: Clear action-oriented title
@@ -365,6 +356,58 @@ def _format_module_api_context(module_api: dict[str, dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _build_valid_prefixes(
+    module_hint: str, module_structure: dict[str, Any] | None = None
+) -> str:
+    """Build dynamic VALID PATH PREFIXES section from spec data.
+
+    Extracts unique directory prefixes from the module_structure's files list,
+    always includes the module_hint, and falls back to "src/" if no data.
+
+    Args:
+        module_hint: Path hint for where implementation should go.
+        module_structure: Dictionary with optional 'files' list of file paths.
+
+    Returns:
+        Formatted string for inclusion in the TASK_BREAKDOWN_PROMPT.
+    """
+    impl_prefixes: set[str] = set()
+
+    # Extract directory prefixes from module_structure files
+    if module_structure and module_structure.get("files"):
+        for file_path in module_structure["files"]:
+            # Get directory portion: "src/tdd_orchestrator/api/routes.py" -> "src/tdd_orchestrator/api/"
+            parts = str(file_path).rsplit("/", 1)
+            if len(parts) == 2:
+                impl_prefixes.add(parts[0] + "/")
+
+    # Always include the module_hint if it looks like a path
+    if module_hint and "/" in module_hint:
+        # Ensure trailing slash
+        hint = module_hint if module_hint.endswith("/") else module_hint + "/"
+        impl_prefixes.add(hint)
+
+    # Fallback: generic src/ prefix
+    if not impl_prefixes:
+        impl_prefixes.add("src/")
+
+    sorted_prefixes = sorted(impl_prefixes)
+    impl_line = ", ".join(f'"{p}"' for p in sorted_prefixes)
+
+    lines = [
+        "VALID PATH PREFIXES (use these only):",
+        f"- impl_file: {impl_line}",
+        '- test_file: "tests/unit/", "tests/integration/", "tests/acceptance/"',
+        "",
+        "INVALID PREFIXES (never use these):",
+        '- "app/" (use "src/" instead)',
+        '- "backend/tests/" (use "tests/" without backend prefix)',
+        '- "backend/src/" (use "src/" without backend prefix)',
+    ]
+
+    return "\n".join(lines)
+
+
 def format_phase_extraction_prompt(app_spec_content: str) -> str:
     """Format the phase extraction prompt with the PRD content.
 
@@ -390,6 +433,7 @@ def format_task_breakdown_prompt(
     module_hint: str,
     context: str,
     module_api: dict[str, dict[str, Any]] | None = None,
+    module_structure: dict[str, Any] | None = None,
     config: DecompositionConfig | None = None,
 ) -> str:
     """Format the task breakdown prompt with cycle details.
@@ -406,6 +450,7 @@ def format_task_breakdown_prompt(
         context: Additional context from the PRD.
         module_api: PLAN9 - Dictionary mapping module paths to their export
             specifications. Used to provide exact export names for task generation.
+        module_structure: Dictionary with optional 'files' list for path prefix extraction.
         config: Decomposition configuration. If None, uses default config.
 
     Returns:
@@ -422,6 +467,9 @@ def format_task_breakdown_prompt(
     if config.enable_scaffolding_reference and module_api:
         module_api_section = _format_module_api_context(module_api)
 
+    # Build dynamic path prefixes from spec data
+    valid_path_prefixes = _build_valid_prefixes(module_hint, module_structure)
+
     return TASK_BREAKDOWN_PROMPT.format(
         cycle_number=cycle_number,
         cycle_title=cycle_title,
@@ -431,6 +479,7 @@ def format_task_breakdown_prompt(
         module_hint=module_hint,
         context=sanitized_context,
         module_api_section=module_api_section,
+        valid_path_prefixes=valid_path_prefixes,
     )
 
 

@@ -37,11 +37,11 @@ except ImportError:
     # SDK not installed - provide None placeholders
     ALL_TOOLS = None  # type: ignore[assignment]
     create_orchestrator_mcp_server = None  # type: ignore[assignment]
-    task_get_by_key = None
-    task_get_next = None
-    task_get_stats = None
-    task_mark_failing = None
-    task_mark_passing = None
+    task_get_by_key = None  # type: ignore[assignment]
+    task_get_next = None  # type: ignore[assignment]
+    task_get_stats = None  # type: ignore[assignment]
+    task_mark_failing = None  # type: ignore[assignment]
+    task_mark_passing = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     pass

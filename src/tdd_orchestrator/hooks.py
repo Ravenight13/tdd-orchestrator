@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from claude_agent_sdk import HookContext  # type: ignore[import-not-found]
-    from claude_agent_sdk.types import SyncHookJSONOutput  # type: ignore[import-not-found]
+    from claude_agent_sdk import HookContext
+    from claude_agent_sdk.types import SyncHookJSONOutput
 
 
 async def pre_tool_use_hook(

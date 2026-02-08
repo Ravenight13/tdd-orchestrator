@@ -9,10 +9,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool  # type: ignore[import-not-found]
+from claude_agent_sdk import McpSdkServerConfig, SdkMcpTool, create_sdk_mcp_server, tool
 
 
-@tool(  # type: ignore[untyped-decorator]
+@tool(
     "task_get_next",
     "Get the next pending task to implement. Returns task details or 'No pending tasks' if queue is empty.",
     {},  # No input parameters
@@ -31,7 +31,7 @@ async def task_get_next(args: dict[str, Any]) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(task, indent=2, default=str)}]}
 
 
-@tool(  # type: ignore[untyped-decorator]
+@tool(
     "task_mark_passing",
     "Mark a task as passing all tests. Use after tests pass.",
     {"task_key": str},  # Simple schema: parameter name -> type
@@ -59,7 +59,7 @@ async def task_mark_passing(args: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-@tool(  # type: ignore[untyped-decorator]
+@tool(
     "task_mark_failing",
     "Mark a task as failing tests. Use when tests fail and need retry or investigation.",
     {"task_key": str, "reason": str},
@@ -91,7 +91,7 @@ async def task_mark_failing(args: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-@tool(  # type: ignore[untyped-decorator]
+@tool(
     "task_get_stats",
     "Get summary statistics of all tasks by status.",
     {},  # No input parameters
@@ -106,7 +106,7 @@ async def task_get_stats(args: dict[str, Any]) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(stats, indent=2)}]}
 
 
-@tool(  # type: ignore[untyped-decorator]
+@tool(
     "task_get_by_key",
     "Get a specific task by its key.",
     {"task_key": str},
