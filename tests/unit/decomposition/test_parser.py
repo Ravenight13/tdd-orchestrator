@@ -476,6 +476,111 @@ Tests: 12
             temp_path.unlink(missing_ok=True)
 
 
+class TestDependencyChangesExtraction:
+    """Test extraction of DEPENDENCY CHANGES section."""
+
+    @pytest.fixture
+    def parser(self) -> SpecParser:
+        """Create a SpecParser instance."""
+        return SpecParser()
+
+    def test_extract_dependency_changes_with_api_extra(self, parser: SpecParser) -> None:
+        """Test parsing a DEPENDENCY CHANGES section with an [api] extra."""
+        content = """\
+SOME HEADER
+============
+
+DEPENDENCY CHANGES
+==================
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+]
+
+NEXT SECTION
+============
+"""
+        temp_path = Path("/tmp/dep_changes_spec.txt")
+        temp_path.write_text(content)
+
+        try:
+            result = parser.parse(temp_path)
+            dep = result.dependency_changes
+            assert dep != {}
+            assert dep["extra_name"] == "api"
+            assert len(dep["packages"]) == 3
+            assert "fastapi>=0.115.0" in dep["packages"]
+            assert "uvicorn[standard]>=0.32.0" in dep["packages"]
+            assert "pydantic>=2.10.0" in dep["packages"]
+            assert "raw" in dep
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def test_extract_dependency_changes_missing_section(self, parser: SpecParser) -> None:
+        """Test that missing DEPENDENCY CHANGES returns empty dict."""
+        content = """\
+FR-1: Test Feature
+This is a test feature.
+"""
+        temp_path = Path("/tmp/no_dep_changes_spec.txt")
+        temp_path.write_text(content)
+
+        try:
+            result = parser.parse(temp_path)
+            assert result.dependency_changes == {}
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def test_extract_dependency_changes_multiple_extras(self, parser: SpecParser) -> None:
+        """Test parsing with the first extra found (parser takes first match)."""
+        content = """\
+DEPENDENCY CHANGES
+==================
+[project.optional-dependencies]
+web = [
+    "flask>=3.0.0",
+    "gunicorn>=22.0.0",
+]
+
+OTHER SECTION
+=============
+"""
+        temp_path = Path("/tmp/multi_dep_spec.txt")
+        temp_path.write_text(content)
+
+        try:
+            result = parser.parse(temp_path)
+            dep = result.dependency_changes
+            assert dep["extra_name"] == "web"
+            assert len(dep["packages"]) == 2
+            assert "flask>=3.0.0" in dep["packages"]
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+    def test_extract_dependency_changes_empty_section(self, parser: SpecParser) -> None:
+        """Test DEPENDENCY CHANGES section with no packages."""
+        content = """\
+DEPENDENCY CHANGES
+==================
+No changes needed.
+
+OTHER SECTION
+=============
+"""
+        temp_path = Path("/tmp/empty_dep_spec.txt")
+        temp_path.write_text(content)
+
+        try:
+            result = parser.parse(temp_path)
+            dep = result.dependency_changes
+            # Should have raw content but no extra_name/packages
+            assert dep.get("packages", []) == [] or dep == {"raw": "No changes needed."}
+        finally:
+            temp_path.unlink(missing_ok=True)
+
+
 class TestMalformedXMLHandling:
     """Test parser resilience to malformed or missing XML sections."""
 

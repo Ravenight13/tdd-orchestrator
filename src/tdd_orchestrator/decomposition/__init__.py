@@ -52,6 +52,7 @@ from .llm_client import (
     SubscriptionErrorSimulator,
 )
 from .parser import ParsedSpec, SpecParser
+from .prerequisites import generate_prerequisite_tasks
 from .validators import (
     AtomicityValidator,
     RecursiveValidationStats,
@@ -84,6 +85,8 @@ __all__ = [
     "MockLLMClient",
     "ClaudeAgentSDKClient",
     "SubscriptionErrorSimulator",
+    # Prerequisites
+    "generate_prerequisite_tasks",
     # Exceptions
     "DecompositionError",
     "SpecParseError",

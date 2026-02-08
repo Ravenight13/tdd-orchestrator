@@ -28,6 +28,7 @@ class ParsedSpec:
         acceptance_criteria: List of AC-N sections with id, title, gherkin content.
         tdd_cycles: List of TDD cycle definitions with cycle number and components.
         module_structure: Dictionary containing base_path and files list.
+        dependency_changes: Parsed dependency changes (extra_name, packages, raw).
         raw_content: The original unprocessed file content.
     """
 
@@ -36,6 +37,7 @@ class ParsedSpec:
     acceptance_criteria: list[dict[str, Any]] = field(default_factory=list)
     tdd_cycles: list[dict[str, Any]] = field(default_factory=list)
     module_structure: dict[str, Any] = field(default_factory=dict)
+    dependency_changes: dict[str, Any] = field(default_factory=dict)
     module_api: dict[str, dict[str, Any]] = field(default_factory=dict)  # PLAN9
     raw_content: str = ""
 
@@ -79,6 +81,11 @@ class SpecParser:
         r"MODULE STRUCTURE\s*\n-+\s*\n(.+?)(?=\n\n[A-Z]|\Z)",
         re.DOTALL,
     )
+    # Dependency changes section pattern
+    DEPENDENCY_CHANGES_PATTERN = re.compile(
+        r"DEPENDENCY CHANGES\s*\n=+\s*\n(.+?)(?=\n[A-Z][A-Z ]{2,}\n[=-]+|\Z)",
+        re.DOTALL,
+    )
     # PLAN9: Module API specification pattern
     MODULE_API_PATTERN = re.compile(
         r"MODULE API SPECIFICATION\s*\n=+\s*\n(.+?)(?=\n={20,}|\Z)",
@@ -114,6 +121,7 @@ class SpecParser:
             acceptance_criteria=self._extract_ac(content),
             tdd_cycles=self._extract_tdd_cycles(content),
             module_structure=self._extract_module_structure(content),
+            dependency_changes=self._extract_dependency_changes(content),
             module_api=self._extract_module_api(content),  # PLAN9
             raw_content=content,
         )
@@ -564,6 +572,55 @@ class SpecParser:
                     result["files"].append(filename)
 
         return result
+
+    def _extract_dependency_changes(self, content: str) -> dict[str, Any]:
+        """Extract DEPENDENCY CHANGES section from content.
+
+        Parses pyproject.toml-style optional dependency declarations like:
+            [project.optional-dependencies]
+            api = ["fastapi>=0.115.0", "uvicorn[standard]>=0.32.0"]
+
+        Args:
+            content: Raw spec file content.
+
+        Returns:
+            Dictionary with extra_name, packages list, and raw section text.
+            Empty dict if no DEPENDENCY CHANGES section found.
+        """
+        match = self.DEPENDENCY_CHANGES_PATTERN.search(content)
+        if not match:
+            return {}
+
+        section = match.group(1).strip()
+        if not section:
+            return {}
+
+        # Extract the extra name from [project.optional-dependencies] block
+        # Look for: extra_name = ["pkg1", "pkg2", ...]
+        extra_match = re.search(
+            r"^\s*(\w+)\s*=\s*\[",
+            section,
+            re.MULTILINE,
+        )
+        if not extra_match:
+            return {"raw": section}
+
+        extra_name = extra_match.group(1)
+
+        # Extract package lines: quoted strings with version specifiers
+        packages: list[str] = re.findall(
+            r'"([^"]+)"',
+            section,
+        )
+
+        if not packages:
+            return {"extra_name": extra_name, "packages": [], "raw": section}
+
+        return {
+            "extra_name": extra_name,
+            "packages": packages,
+            "raw": section,
+        }
 
     def _extract_module_api(self, content: str) -> dict[str, dict[str, Any]]:
         """Extract MODULE_API_SPECIFICATION section from spec.

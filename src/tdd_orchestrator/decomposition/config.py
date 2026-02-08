@@ -49,6 +49,9 @@ class DecompositionConfig:
     # PLAN9: Scaffolding reference feature flag
     enable_scaffolding_reference: bool = False
 
+    # Generate Phase 0 prerequisite tasks from spec metadata
+    generate_prerequisites: bool = True
+
 
 @dataclass
 class DecompositionMetrics:

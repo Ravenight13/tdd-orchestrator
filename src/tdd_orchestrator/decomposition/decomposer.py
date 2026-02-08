@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any
 from .config import DecompositionConfig, DecompositionMetrics
 from .exceptions import DecompositionError
 from .llm_client import LLMClient, LLMClientError, LLMResponseParseError, parse_json_response
+from .prerequisites import generate_prerequisite_tasks
 from .prompts import (
     format_ac_generation_prompt,
     format_implementation_hints_prompt,
@@ -236,6 +237,18 @@ class LLMDecomposer:
             self.metrics.pass2_tasks_generated = len(all_tasks)
             logger.info(f"Pass 2 complete: {len(all_tasks)} tasks generated")
 
+            # Generate Phase 0 prerequisite tasks (deterministic, no LLM)
+            if self.config.generate_prerequisites:
+                prerequisite_decomposed = generate_prerequisite_tasks(
+                    parsed_spec, self._generate_task_key
+                )
+                if prerequisite_decomposed:
+                    logger.info(
+                        f"Generated {len(prerequisite_decomposed)} prerequisite tasks (Phase 0)"
+                    )
+            else:
+                prerequisite_decomposed = []
+
             # Pass 3: Generate acceptance criteria (parallel)
             logger.info("Pass 3: Generating acceptance criteria")
             tasks = await self._generate_all_ac(all_tasks, parsed_spec)
@@ -249,7 +262,7 @@ class LLMDecomposer:
             logger.info(f"Pass 4 complete: {hints_count} tasks received hints")
 
             self.metrics.total_duration_seconds = time.time() - start_time
-            return tasks
+            return prerequisite_decomposed + tasks
 
         except Exception as e:
             self.metrics.errors.append(str(e))
@@ -313,17 +326,8 @@ class LLMDecomposer:
     async def _break_all_cycles(
         self, cycles: list[dict[str, Any]], spec: ParsedSpec
     ) -> list[dict[str, Any]]:
-        """Break all cycles into tasks, optionally in parallel with concurrency limiting.
-
-        Args:
-            cycles: List of cycle dictionaries from Pass 1.
-            spec: ParsedSpec for additional context.
-
-        Returns:
-            List of task dictionaries with phase and sequence assigned.
-        """
+        """Break all cycles into tasks, optionally in parallel with concurrency limiting."""
         if self.config.enable_parallel_calls:
-            # Run Pass 2 in parallel with concurrency limiting
             coroutines = [self._break_cycle_with_semaphore(cycle, spec) for cycle in cycles]
             results = await asyncio.gather(*coroutines, return_exceptions=True)
 
@@ -368,15 +372,7 @@ class LLMDecomposer:
     async def _break_cycle_with_semaphore(
         self, cycle: dict[str, Any], spec: ParsedSpec
     ) -> list[dict[str, Any]]:
-        """Break a cycle with semaphore-controlled concurrency.
-
-        Args:
-            cycle: Cycle dictionary from Pass 1.
-            spec: ParsedSpec for additional context.
-
-        Returns:
-            List of task dictionaries for this cycle.
-        """
+        """Break a cycle with semaphore-controlled concurrency."""
         async with self._semaphore:
             return await self._break_cycle(cycle, spec)
 
