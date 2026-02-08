@@ -55,10 +55,12 @@ from .decomposition import (
     SpecParser,
     TaskGenerator,
 )
+from .decomposition.spec_validator import SpecConformanceValidator
 from .task_loader import (
     get_existing_prefixes,
     load_tdd_tasks,
     update_task_acceptance_criteria,
+    update_task_depends_on,
     write_tasks_incremental,
 )
 
@@ -241,6 +243,7 @@ async def run_decomposition(
     use_mock_llm: bool = False,
     verbose: bool = False,
     phases_filter: set[int] | None = None,
+    scaffolding_ref: bool = False,
 ) -> int:
     """Run the full decomposition pipeline.
 
@@ -252,6 +255,7 @@ async def run_decomposition(
         use_mock_llm: Use mock LLM client for testing.
         verbose: Enable verbose logging.
         phases_filter: Set of phase numbers to decompose. If None, decompose all.
+        scaffolding_ref: Enable MODULE API SPECIFICATION reference in prompts.
 
     Returns:
         Exit code (0 for success, 1 for error).
@@ -367,7 +371,7 @@ async def run_decomposition(
             )
 
     # Step 4: Decompose with LLM (with incremental writes)
-    config = DecompositionConfig()
+    config = DecompositionConfig(enable_scaffolding_reference=scaffolding_ref)
     decomposer = LLMDecomposer(
         client=llm_client,
         config=config,
@@ -412,6 +416,22 @@ async def run_decomposition(
     # Only calculate dependencies, don't reassign keys (they're already correct)
     final_tasks = generator._calculate_dependencies(validated_tasks)
 
+    # Step 5.5: Validate against spec
+    if parsed_spec.module_structure.get("files") or parsed_spec.module_api:
+        validator = SpecConformanceValidator()
+        violations = validator.validate(
+            final_tasks, parsed_spec.module_structure, parsed_spec.module_api
+        )
+        for v in violations:
+            logger.warning(
+                "Spec violation: %s %s: expected=%s actual=%s",
+                v.task_key, v.field, v.expected, v.actual,
+            )
+        error_count = sum(1 for v in violations if v.severity == "error")
+        if error_count:
+            print(f"\nWARNING: {error_count} spec conformance violations found.")
+            print("Tasks may have incorrect file paths. Review the warnings above.")
+
     # Print summary
     _print_summary(spec_path, prefix, final_tasks, metrics, validation_stats)
 
@@ -425,6 +445,7 @@ async def run_decomposition(
     logger.info("Updating acceptance criteria and loading final tasks...")
 
     ac_updated = 0
+    deps_updated = 0
     new_tasks_loaded = 0
 
     for task in final_tasks:
@@ -433,6 +454,10 @@ async def run_decomposition(
             updated = await update_task_acceptance_criteria(task.task_key, task.acceptance_criteria)
             if updated:
                 ac_updated += 1
+                # Also persist depends_on (calculated in Step 5)
+                if task.depends_on:
+                    await update_task_depends_on(task.task_key, task.depends_on)
+                    deps_updated += 1
                 continue
 
         # Task doesn't exist yet (from validation splits) - create it
@@ -461,6 +486,7 @@ async def run_decomposition(
     print(f"  Incremental writes (Pass 2): {incremental_tasks_written}")
     print(f"  Incremental AC updates (Pass 3): {incremental_ac_updated}")
     print(f"  Batch AC updates (catch-up): {ac_updated}")
+    print(f"  Dependencies updated: {deps_updated}")
     print(f"  New tasks (from validation): {new_tasks_loaded}")
     print(f"  Total final tasks: {len(final_tasks)}")
 
@@ -516,6 +542,11 @@ async def main() -> int:
         default=None,
         help="Comma-separated phase numbers to decompose (e.g., '15,16,17'). If omitted, all phases.",
     )
+    parser.add_argument(
+        "--scaffolding-ref",
+        action="store_true",
+        help="Enable MODULE API SPECIFICATION reference in decomposition prompts",
+    )
 
     args = parser.parse_args()
 
@@ -539,6 +570,7 @@ async def main() -> int:
             use_mock_llm=args.mock_llm,
             verbose=args.verbose,
             phases_filter=_parse_phases(args.phases),
+            scaffolding_ref=args.scaffolding_ref,
         )
 
     except Exception as e:

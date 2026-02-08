@@ -15,7 +15,7 @@ import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any
 
 from .config import DecompositionConfig, DecompositionMetrics
@@ -412,6 +412,9 @@ class LLMDecomposer:
             expected_tests=expected_tests,
             module_hint=module_hint,
             context=context,
+            module_api=spec.module_api if self.config.enable_scaffolding_reference else None,
+            module_structure=spec.module_structure,
+            config=self.config,
         )
 
         self._check_llm_limit()
@@ -623,32 +626,7 @@ class LLMDecomposer:
                     logger.warning(f"Hints generation failed for {tasks[i].task_key}: {result}")
                     self.metrics.errors.append(f"Hints for {tasks[i].task_key}: {result}")
                 elif result:  # Non-empty hints
-                    # Update the task's implementation_hints in place
-                    # Create a new task with the hints since dataclass is not mutable by default
-                    tasks[i] = DecomposedTask(
-                        task_key=tasks[i].task_key,
-                        title=tasks[i].title,
-                        goal=tasks[i].goal,
-                        estimated_tests=tasks[i].estimated_tests,
-                        estimated_lines=tasks[i].estimated_lines,
-                        test_file=tasks[i].test_file,
-                        impl_file=tasks[i].impl_file,
-                        components=tasks[i].components,
-                        acceptance_criteria=tasks[i].acceptance_criteria,
-                        phase=tasks[i].phase,
-                        sequence=tasks[i].sequence,
-                        depends_on=tasks[i].depends_on,
-                        parent_task_key=tasks[i].parent_task_key,
-                        recursion_depth=tasks[i].recursion_depth,
-                        error_codes=tasks[i].error_codes,
-                        blocking_assumption=tasks[i].blocking_assumption,
-                        verify_command=tasks[i].verify_command,
-                        done_criteria=tasks[i].done_criteria,
-                        complexity=tasks[i].complexity,
-                        implementation_hints=result,
-                        module_exports=tasks[i].module_exports,
-                        import_pattern=tasks[i].import_pattern,
-                    )
+                    tasks[i] = replace(tasks[i], implementation_hints=result)
 
             return tasks
         else:
@@ -656,30 +634,7 @@ class LLMDecomposer:
             for i, task in enumerate(tasks):
                 hints = await self._generate_hints(task)
                 if hints:
-                    tasks[i] = DecomposedTask(
-                        task_key=task.task_key,
-                        title=task.title,
-                        goal=task.goal,
-                        estimated_tests=task.estimated_tests,
-                        estimated_lines=task.estimated_lines,
-                        test_file=task.test_file,
-                        impl_file=task.impl_file,
-                        components=task.components,
-                        acceptance_criteria=task.acceptance_criteria,
-                        phase=task.phase,
-                        sequence=task.sequence,
-                        depends_on=task.depends_on,
-                        parent_task_key=task.parent_task_key,
-                        recursion_depth=task.recursion_depth,
-                        error_codes=task.error_codes,
-                        blocking_assumption=task.blocking_assumption,
-                        verify_command=task.verify_command,
-                        done_criteria=task.done_criteria,
-                        complexity=task.complexity,
-                        implementation_hints=hints,
-                        module_exports=task.module_exports,
-                        import_pattern=task.import_pattern,
-                    )
+                    tasks[i] = replace(task, implementation_hints=hints)
             return tasks
 
     async def _generate_hints_with_semaphore(self, task: DecomposedTask) -> str:

@@ -326,6 +326,45 @@ async def update_task_acceptance_criteria(
         return updated
 
 
+async def update_task_depends_on(
+    task_key: str,
+    depends_on: list[str],
+    db: "OrchestratorDB | None" = None,
+) -> bool:
+    """Update depends_on for an existing task.
+
+    This function is called after Step 5 calculates dependencies
+    to update tasks that were written incrementally in Pass 2.
+
+    Args:
+        task_key: The task's unique key.
+        depends_on: List of task keys this task depends on.
+        db: Database instance. If None, uses singleton via get_db().
+
+    Returns:
+        True if task was updated, False if task not found.
+    """
+    from .database import get_db
+
+    if db is None:
+        db = await get_db()
+
+    await db._ensure_connected()
+    if not db._conn:
+        return False
+
+    async with db._write_lock:
+        cursor = await db._conn.execute(
+            "UPDATE tasks SET depends_on = ? WHERE task_key = ?",
+            (json.dumps(depends_on), task_key),
+        )
+        await db._conn.commit()
+        updated = cursor.rowcount > 0
+        if updated:
+            logger.debug(f"Updated depends_on for task {task_key}: {len(depends_on)} dependencies")
+        return updated
+
+
 async def get_existing_prefixes(db: "OrchestratorDB | None" = None) -> list[str]:
     """Get unique task_key prefixes from existing tasks.
 
