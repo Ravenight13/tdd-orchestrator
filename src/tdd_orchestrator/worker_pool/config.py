@@ -92,7 +92,7 @@ class _StubAgentOptions:
 ClaudeAgentOptions = _StubAgentOptions
 
 try:
-    from claude_agent_sdk import (  # type: ignore[import-not-found]
+    from claude_agent_sdk import (
         ClaudeAgentOptions as _SDKAgentOptions,
         query as _sdk_query,
     )
