@@ -1,39 +1,38 @@
 # TDD Orchestrator Progress
 
 **Run ID**: 1
-**Started**: 2026-02-07 21:36:39
-**Last Updated**: 2026-02-07 21:36:39
+**Started**: 2026-02-08 07:38:27
+**Last Updated**: 2026-02-08 07:40:57
 **Status**: Running
 
 ## Summary
 | Metric | Value |
 |--------|-------|
-| Total Tasks | 3 |
-| Completed | 2 |
-| Success Rate | 100% |
+| Total Tasks | 48 |
+| Completed | 0 |
+| Success Rate | 0% |
 | Estimated Completion | Calculating... |
 
 ## Active Workers
 | Worker | Task | Stage | Duration |
 |--------|------|-------|----------|
-| Worker 1 | TDD-01 | - | 0s |
-| Worker 2 | TDD-02 | - | 0s |
+| Worker 1 | - | - | - |
+| Worker 2 | - | - | - |
 
 ## Recently Completed (Last 5)
-| Task | Title | Duration | Completed At |
-|------|-------|----------|--------------|
-| TDD-01 | Task 1 | - | 03:36:39 |
-| TDD-02 | Task 2 | - | 03:36:39 |
+*No completed tasks yet*
 
 ## Blocked Tasks
-*No blocked tasks*
+| Task | Title | Reason | Failed At |
+|------|-------|--------|-----------|
+| API-TDD-0A-01 | Add [api] optional dependencie... | Unknown error | 13:40:57 |
+| API-TDD-0A-02 | Create src/tdd_orchestrator/ap... | Unknown error | 13:40:22 |
 
 ## Worker Statistics
 | Worker | Completed | Failed | Invocations |
 |--------|-----------|--------|-------------|
-| Worker 1 | 1 completed | 0 failed | 2 invocations |
-| Worker 2 | 1 completed | 0 failed | 0 invocations |
+| Worker 1 | 0 completed | 1 failed | 5 invocations |
+| Worker 2 | 0 completed | 1 failed | 3 invocations |
 
 ## Invocation Budget
-**Used**: 2/2 (100%)
-Warning: Nearing limit
+**Used**: 8/100 (8%)
