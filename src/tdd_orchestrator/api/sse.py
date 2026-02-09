@@ -1,8 +1,7 @@
-"""Server-Sent Events (SSE) broadcaster for fan-out publish-subscribe pattern."""
+"""Server-Sent Events (SSE) broadcaster with graceful shutdown."""
 
 import asyncio
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -10,66 +9,96 @@ class SSEEvent:
     """Represents a Server-Sent Event."""
 
     data: str
-    event: Optional[str] = None
-    id: Optional[str] = None
+    event: str | None = None
+    id: str | None = None
+    retry: int | None = None
 
 
 class SSEBroadcaster:
-    """Broadcaster for Server-Sent Events with subscribe/unsubscribe and fan-out publish."""
+    """Thread-safe SSE broadcaster with graceful shutdown support."""
 
     def __init__(self) -> None:
-        """Initialize the broadcaster with an empty list of subscribers."""
-        self._subscribers: list[asyncio.Queue[SSEEvent]] = []
+        """Initialize the SSE broadcaster."""
+        self._subscribers: set[asyncio.Queue[SSEEvent | None]] = set()
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._shutdown: bool = False
 
-    @property
-    def subscriber_count(self) -> int:
-        """Return the current number of active subscribers."""
-        return len(self._subscribers)
+    async def subscribe(self) -> asyncio.Queue[SSEEvent | None]:
+        """Subscribe a new client and return their queue.
 
-    def subscribe(self, queue: asyncio.Queue[SSEEvent]) -> None:
+        If broadcaster is already shut down, returns a queue with sentinel value.
+
+        Returns:
+            asyncio.Queue containing SSEEvent or None (sentinel).
         """
-        Subscribe a client queue to receive events.
+        async with self._lock:
+            queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+
+            if self._shutdown:
+                # Already shut down, immediately send sentinel
+                queue.put_nowait(None)
+            else:
+                # Add to active subscribers
+                self._subscribers.add(queue)
+
+            return queue
+
+    async def unsubscribe(self, queue: asyncio.Queue[SSEEvent | None]) -> None:
+        """Unsubscribe a client by removing their queue.
 
         Args:
-            queue: The asyncio.Queue that will receive published events.
+            queue: The queue to remove from subscribers.
         """
-        self._subscribers.append(queue)
-
-    def unsubscribe(self, queue: asyncio.Queue[SSEEvent]) -> None:
-        """
-        Unsubscribe a client from receiving events.
-
-        Args:
-            queue: The queue to remove from subscribers. If not found, no error is raised.
-        """
-        try:
-            self._subscribers.remove(queue)
-        except ValueError:
-            pass
+        async with self._lock:
+            self._subscribers.discard(queue)
 
     async def publish(self, event: SSEEvent) -> None:
-        """
-        Publish an event to all subscribers, removing slow consumers with full queues.
+        """Publish an event to all subscribers.
+
+        If broadcaster is shut down, this is a no-op.
 
         Args:
-            event: The event data to broadcast to all subscribers.
-
-        Note:
-            Uses put_nowait for non-blocking delivery. If a queue is full,
-            that subscriber is automatically removed from the subscriber list.
+            event: The SSE event to broadcast.
         """
-        to_remove: list[asyncio.Queue[SSEEvent]] = []
+        async with self._lock:
+            if self._shutdown:
+                # No-op after shutdown
+                return
 
-        for queue in self._subscribers:
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                # Mark slow consumer for removal
-                to_remove.append(queue)
+            # Create a copy of subscribers to iterate safely
+            for queue in list(self._subscribers):
+                try:
+                    queue.put_nowait(event)
+                except asyncio.QueueFull:
+                    # Skip if queue is full
+                    pass
 
-        # Remove slow consumers
-        for queue in to_remove:
-            try:
-                self._subscribers.remove(queue)
-            except ValueError:
-                pass
+    async def shutdown(self) -> None:
+        """Gracefully shutdown the broadcaster.
+
+        Sends sentinel value (None) to all subscribers and clears the subscriber set.
+        Multiple calls to shutdown are idempotent.
+        """
+        async with self._lock:
+            if self._shutdown:
+                # Already shut down, idempotent
+                return
+
+            self._shutdown = True
+
+            # Send sentinel to all subscribers
+            for queue in list(self._subscribers):
+                try:
+                    queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    # Queue is full - drain it and add sentinel
+                    while not queue.empty():
+                        try:
+                            queue.get_nowait()
+                        except asyncio.QueueEmpty:
+                            break
+                    # Now put the sentinel
+                    queue.put_nowait(None)
+
+            # Clear all subscribers
+            self._subscribers.clear()
