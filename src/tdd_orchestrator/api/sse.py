@@ -1,58 +1,75 @@
 """Server-Sent Events (SSE) broadcaster for fan-out publish-subscribe pattern."""
 
 import asyncio
-from typing import Any, TypeAlias
+from dataclasses import dataclass
+from typing import Optional
 
-# Type alias for SSE events (dict-based events)
-SSEEvent: TypeAlias = dict[str, Any]
+
+@dataclass
+class SSEEvent:
+    """Represents a Server-Sent Event."""
+
+    data: str
+    event: Optional[str] = None
+    id: Optional[str] = None
 
 
 class SSEBroadcaster:
     """Broadcaster for Server-Sent Events with subscribe/unsubscribe and fan-out publish."""
 
     def __init__(self) -> None:
-        """Initialize the broadcaster with an empty set of subscribers."""
-        self._subscribers: set[asyncio.Queue[Any]] = set()
+        """Initialize the broadcaster with an empty list of subscribers."""
+        self._subscribers: list[asyncio.Queue[SSEEvent]] = []
 
     @property
     def subscriber_count(self) -> int:
         """Return the current number of active subscribers."""
         return len(self._subscribers)
 
-    def subscribe(self) -> asyncio.Queue[Any]:
+    def subscribe(self, queue: asyncio.Queue[SSEEvent]) -> None:
         """
-        Subscribe a new client to receive events.
+        Subscribe a client queue to receive events.
 
-        Returns:
-            A new asyncio.Queue that will receive published events.
+        Args:
+            queue: The asyncio.Queue that will receive published events.
         """
-        queue: asyncio.Queue[Any] = asyncio.Queue()
-        self._subscribers.add(queue)
-        return queue
+        self._subscribers.append(queue)
 
-    def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
+    def unsubscribe(self, queue: asyncio.Queue[SSEEvent]) -> None:
         """
         Unsubscribe a client from receiving events.
 
         Args:
             queue: The queue to remove from subscribers. If not found, no error is raised.
         """
-        self._subscribers.discard(queue)
+        try:
+            self._subscribers.remove(queue)
+        except ValueError:
+            pass
 
-    def publish(self, event: dict[str, Any]) -> None:
+    async def publish(self, event: SSEEvent) -> None:
         """
-        Publish an event to all subscribers using non-blocking fan-out.
+        Publish an event to all subscribers, removing slow consumers with full queues.
 
         Args:
             event: The event data to broadcast to all subscribers.
 
         Note:
             Uses put_nowait for non-blocking delivery. If a queue is full,
-            the event is silently dropped for that subscriber.
+            that subscriber is automatically removed from the subscriber list.
         """
+        to_remove: list[asyncio.Queue[SSEEvent]] = []
+
         for queue in self._subscribers:
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
-                # Silently drop events for full queues
+                # Mark slow consumer for removal
+                to_remove.append(queue)
+
+        # Remove slow consumers
+        for queue in to_remove:
+            try:
+                self._subscribers.remove(queue)
+            except ValueError:
                 pass
