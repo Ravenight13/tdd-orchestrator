@@ -43,6 +43,12 @@ async def reset_database_singleton(request: pytest.FixtureRequest) -> None:
         "running_run_when_one_exists" in request.node.name
     )
 
+    # Tests that expect seeded task data
+    needs_tasks_data = test_class in (
+        "TestGetTasksByStatusBasicRetrieval",
+        "TestGetTasksByStatusRowContents",
+    )
+
     if needs_runs_data and db._conn:
         # Seed 5 runs: 3 passed, 2 failed (for execution_id=1)
         await db._conn.executemany(
@@ -69,6 +75,41 @@ async def reset_database_singleton(request: pytest.FixtureRequest) -> None:
             """
         )
         await db._conn.commit()
+
+    if needs_tasks_data and db._conn:
+        # Determine number of tasks based on test class
+        if test_class == "TestGetTasksByStatusBasicRetrieval":
+            # Seed 3 pending and 2 in_progress tasks
+            await db._conn.executemany(
+                """
+                INSERT INTO tasks (id, spec_id, task_key, title, status, phase, sequence)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (1, 1, "TDD-1", "Task 1", "pending", 0, 1),
+                    (2, 1, "TDD-2", "Task 2", "pending", 0, 2),
+                    (3, 1, "TDD-3", "Task 3", "pending", 0, 3),
+                    (4, 1, "TDD-4", "Task 4", "in_progress", 0, 4),
+                    (5, 1, "TDD-5", "Task 5", "in_progress", 0, 5),
+                ],
+            )
+            await db._conn.commit()
+        elif test_class == "TestGetTasksByStatusRowContents":
+            # Seed 5 pending tasks with distinct spec_ids
+            await db._conn.executemany(
+                """
+                INSERT INTO tasks (id, spec_id, task_key, title, status, phase, sequence)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (1, 1, "TDD-1", "Task 1", "pending", 0, 1),
+                    (2, 2, "TDD-2", "Task 2", "pending", 0, 2),
+                    (3, 3, "TDD-3", "Task 3", "pending", 0, 3),
+                    (4, 4, "TDD-4", "Task 4", "pending", 0, 4),
+                    (5, 5, "TDD-5", "Task 5", "pending", 0, 5),
+                ],
+            )
+            await db._conn.commit()
 
     yield
 
