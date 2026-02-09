@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-from src.tdd_orchestrator.api.dependencies import (
+from tdd_orchestrator.api.dependencies import (
     get_db_dep,
     get_broadcaster_dep,
     init_dependencies,

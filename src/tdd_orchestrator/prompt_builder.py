@@ -24,6 +24,7 @@ from .prompt_templates import (
     FIX_PROMPT_TEMPLATE,
     GREEN_PROMPT_TEMPLATE,
     GREEN_RETRY_TEMPLATE,
+    IMPORT_CONVENTION,
     RED_FIX_PROMPT_TEMPLATE,
     RED_PROMPT_TEMPLATE,
     REFACTOR_PROMPT_TEMPLATE,
@@ -69,6 +70,14 @@ class PromptBuilder:
             return []
 
     @staticmethod
+    def _to_import_path(file_path: str) -> str:
+        """Convert a file path to a Python import path, stripping src layout prefix."""
+        import_path = file_path.replace("/", ".").replace(".py", "")
+        if import_path.startswith("src."):
+            import_path = import_path[4:]
+        return import_path
+
+    @staticmethod
     def _parse_module_exports(module_exports_raw: str | list[str] | None) -> list[str]:
         """Parse module_exports from string or list."""
         if module_exports_raw is None:
@@ -90,7 +99,7 @@ class PromptBuilder:
         )
 
         impl_file = task.get("impl_file", "impl_file.py")
-        import_path = impl_file.replace("/", ".").replace(".py", "")
+        import_path = PromptBuilder._to_import_path(impl_file)
         goal = task.get("goal", "")
         func_name = goal.split()[-1].lower() if goal else "function"
 
@@ -122,6 +131,7 @@ class PromptBuilder:
             test_file=test_file,
             impl_file=impl_file,
             import_hint=import_hint,
+            import_convention=IMPORT_CONVENTION,
             static_review_instructions=STATIC_REVIEW_INSTRUCTIONS,
             test_file_abs=test_file_abs,
         )
@@ -133,7 +143,7 @@ class PromptBuilder:
 
         module_exports = PromptBuilder._parse_module_exports(task.get("module_exports"))
         impl_file = task.get("impl_file", "impl_file.py")
-        import_path = impl_file.replace("/", ".").replace(".py", "")
+        import_path = PromptBuilder._to_import_path(impl_file)
 
         module_exports_section = ""
         if module_exports:
@@ -163,6 +173,7 @@ class PromptBuilder:
             impl_file_abs=impl_file_abs,
             module_exports_section=module_exports_section,
             file_structure_constraint=FILE_STRUCTURE_CONSTRAINT,
+            import_convention=IMPORT_CONVENTION,
             type_annotation_instructions=TYPE_ANNOTATION_INSTRUCTIONS,
         )
 
@@ -188,6 +199,7 @@ class PromptBuilder:
             impl_file=impl_file,
             criteria_text=criteria_text,
             truncated_test_output=truncated_test_output,
+            import_convention=IMPORT_CONVENTION,
         )
 
     @staticmethod

@@ -5,7 +5,7 @@ import uuid
 import pytest
 from pydantic import ValidationError
 
-from src.tdd_orchestrator.api.models.requests import (
+from tdd_orchestrator.api.models.requests import (
     CircuitResetRequest,
     TaskFilterParams,
     TaskRetryRequest,

@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from src.tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
+from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
 
 
 class TestSSEBroadcasterSubscribe:

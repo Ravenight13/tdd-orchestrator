@@ -112,6 +112,8 @@ def _generate_scaffold_task(
 
     # Convert filesystem path to Python package for imports
     package_path = base_path.replace("/", ".")
+    if package_path.startswith("src."):
+        package_path = package_path[4:]
     task_key: str = task_key_generator(0)
     files: list[str] = mod.get("files", [])
     file_count = len(files)

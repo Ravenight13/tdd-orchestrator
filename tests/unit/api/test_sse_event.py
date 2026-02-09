@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.tdd_orchestrator.api.sse import SSEEvent
+from tdd_orchestrator.api.sse import SSEEvent
 
 
 class TestSSEEventDataOnly:

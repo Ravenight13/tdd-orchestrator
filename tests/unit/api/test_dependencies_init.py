@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.tdd_orchestrator.api.dependencies import (
+from tdd_orchestrator.api.dependencies import (
     get_broadcaster_dep,
     get_db_dep,
     init_dependencies,

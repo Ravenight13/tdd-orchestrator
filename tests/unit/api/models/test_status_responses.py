@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.tdd_orchestrator.api.models.responses import (
+from tdd_orchestrator.api.models.responses import (
     HealthResponse,
     ProgressResponse,
     RunListResponse,

@@ -113,6 +113,12 @@ Your test file will be automatically checked. Tests that fail these checks will 
 6. **No print statements** - Use assertions instead
 7. **No bare except clauses** - Use specific exceptions"""
 
+IMPORT_CONVENTION = """## IMPORT CONVENTION
+This project uses a src-layout. The package name is `tdd_orchestrator`, NOT `src.tdd_orchestrator`.
+- CORRECT: `from tdd_orchestrator.api.app import create_app`
+- WRONG:   `from src.tdd_orchestrator.api.app import create_app`
+Never use `src.` prefix in imports."""
+
 FILE_STRUCTURE_CONSTRAINT = """## CRITICAL FILE STRUCTURE CONSTRAINT
 - Create a SINGLE MODULE FILE at the EXACT path shown above
 - Do NOT create a package directory (folder with __init__.py)
@@ -139,6 +145,8 @@ RED_PROMPT_TEMPLATE = """You are a test writer. Your ONLY job is to write pytest
 - **Test file to create**: {test_file}
 - **Implementation will be at**: {impl_file}
 - **Import path**: `{import_hint}`
+
+{import_convention}
 
 ## REQUIREMENTS
 1. Write a pytest test class with test methods
@@ -189,6 +197,8 @@ You MUST create the implementation file at EXACTLY this path:
 {module_exports_section}
 {file_structure_constraint}
 
+{import_convention}
+
 ## REQUIREMENTS
 1. Write MINIMAL code to pass all tests
 2. Follow the test assertions exactly
@@ -229,6 +239,8 @@ Review the test output above. Common issues include:
 - Incorrect return types
 - Logic errors in the implementation
 - Edge cases not handled
+
+{import_convention}
 
 ### Your Task
 1. READ the existing implementation file: {impl_file}

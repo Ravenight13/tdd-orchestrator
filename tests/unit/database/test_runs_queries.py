@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.tdd_orchestrator.database.mixins.runs_mixin import (
+from tdd_orchestrator.database.mixins.runs_mixin import (
     get_current_run,
     get_execution_runs,
 )

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.tdd_orchestrator.database.mixins.task_mixin import get_tasks_filtered
+from tdd_orchestrator.database.mixins.task_mixin import get_tasks_filtered
 
 
 class TestGetTasksFilteredByStatus:

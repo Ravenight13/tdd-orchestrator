@@ -23,7 +23,7 @@ class TestCreateAppLifespan:
         """GIVEN create_app() is called WHEN inspecting the returned FastAPI instance
         THEN its lifespan parameter is set (not None).
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         app = create_app()
 
@@ -34,7 +34,7 @@ class TestCreateAppLifespan:
         """GIVEN create_app() is called WHEN inspecting routes
         THEN the app includes the /health route.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         app = create_app()
 
@@ -50,17 +50,17 @@ class TestLifespanStartup:
         """GIVEN create_app() is called WHEN the app starts up via ASGI lifespan
         THEN init_dependencies is awaited during the lifespan startup phase.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -77,17 +77,17 @@ class TestLifespanStartup:
         """GIVEN create_app() is called WHEN the app has started
         THEN singletons (db, redis, etc.) are available in app.state.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -114,17 +114,17 @@ class TestLifespanShutdown:
         WHEN the app shuts down (lifespan context manager exits)
         THEN shutdown_dependencies is awaited.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -142,17 +142,17 @@ class TestLifespanShutdown:
         WHEN shutdown_dependencies is called
         THEN it receives the app instance for proper cleanup.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -177,17 +177,17 @@ class TestLifespanErrorHandling:
         WHEN the app lifespan runs
         THEN the exception propagates (app fails to start).
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock(side_effect=RuntimeError("Init failed"))
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -203,17 +203,17 @@ class TestLifespanErrorHandling:
         WHEN the app lifespan runs
         THEN shutdown_dependencies is still called to clean up partial resources.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock(side_effect=RuntimeError("Init failed"))
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -236,17 +236,17 @@ class TestHealthEndpoint:
         WHEN GET /health is called
         THEN it returns HTTP 200.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -263,17 +263,17 @@ class TestHealthEndpoint:
         WHEN GET /health is called
         THEN it returns JSON body containing {"status": "ok"}.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -292,17 +292,17 @@ class TestHealthEndpoint:
         WHEN GET /health is called
         THEN it confirms dependencies initialized by lifespan are functional.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         mock_init = AsyncMock()
         mock_shutdown = AsyncMock()
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies", mock_init
+                "tdd_orchestrator.api.app.init_dependencies", mock_init
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
+                "tdd_orchestrator.api.app.shutdown_dependencies", mock_shutdown
             ),
         ):
             app = create_app()
@@ -327,7 +327,7 @@ class TestLifespanOrder:
         WHEN the app starts and stops
         THEN init_dependencies is called before shutdown_dependencies.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         call_order: list[str] = []
 
@@ -339,11 +339,11 @@ class TestLifespanOrder:
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies",
+                "tdd_orchestrator.api.app.init_dependencies",
                 AsyncMock(side_effect=mock_init),
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies",
+                "tdd_orchestrator.api.app.shutdown_dependencies",
                 AsyncMock(side_effect=mock_shutdown),
             ),
         ):
@@ -361,7 +361,7 @@ class TestLifespanOrder:
         WHEN the app starts
         THEN init_dependencies completes before the first request is served.
         """
-        from src.tdd_orchestrator.api.app import create_app
+        from tdd_orchestrator.api.app import create_app
 
         init_completed = False
         request_served_after_init = False
@@ -372,11 +372,11 @@ class TestLifespanOrder:
 
         with (
             patch(
-                "src.tdd_orchestrator.api.app.init_dependencies",
+                "tdd_orchestrator.api.app.init_dependencies",
                 AsyncMock(side_effect=mock_init),
             ),
             patch(
-                "src.tdd_orchestrator.api.app.shutdown_dependencies",
+                "tdd_orchestrator.api.app.shutdown_dependencies",
                 AsyncMock(),
             ),
         ):

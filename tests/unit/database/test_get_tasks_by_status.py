@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.tdd_orchestrator.database.mixins.task_mixin import get_tasks_by_status
+from tdd_orchestrator.database.mixins.task_mixin import get_tasks_by_status
 
 
 class TestGetTasksByStatusBasicRetrieval:

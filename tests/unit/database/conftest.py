@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.tdd_orchestrator.database.singleton import get_db, reset_db, set_db_path
+from tdd_orchestrator.database.singleton import get_db, reset_db, set_db_path
 
 
 @pytest.fixture(autouse=True)

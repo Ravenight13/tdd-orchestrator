@@ -102,3 +102,24 @@ def test_build_passes_base_dir_to_green(task: dict[str, Any]) -> None:
     result = PromptBuilder.build(Stage.GREEN, task, test_output="failures", base_dir=_BASE_DIR)
     expected = str(_BASE_DIR / task["impl_file"])
     assert expected in result
+
+
+# ---------------------------------------------------------------------------
+# _to_import_path regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_to_import_path_strips_src_prefix() -> None:
+    """_to_import_path strips the src. prefix from src-layout paths."""
+    assert (
+        PromptBuilder._to_import_path("src/tdd_orchestrator/api/app.py")
+        == "tdd_orchestrator.api.app"
+    )
+
+
+def test_to_import_path_no_src_prefix() -> None:
+    """_to_import_path leaves paths without src/ prefix unchanged."""
+    assert (
+        PromptBuilder._to_import_path("tdd_orchestrator/api/app.py")
+        == "tdd_orchestrator.api.app"
+    )

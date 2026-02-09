@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.tdd_orchestrator.database.mixins.worker_mixin import get_all_workers
-from src.tdd_orchestrator.database.singleton import get_db, reset_db, set_db_path
+from tdd_orchestrator.database.mixins.worker_mixin import get_all_workers
+from tdd_orchestrator.database.singleton import get_db, reset_db, set_db_path
 
 
 class TestGetAllWorkersMultipleWorkers:
