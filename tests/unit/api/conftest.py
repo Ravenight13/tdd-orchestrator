@@ -1,62 +1,39 @@
 """Shared fixtures for API unit tests.
 
-Sets up proper ASGI lifespan handling for httpx AsyncClient tests.
+Patches ASGITransport at the class level so that lifespan startup/shutdown
+events fire for every ``AsyncClient`` context manager, regardless of
+which import path the test file used to obtain ``ASGITransport``.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+_original_aexit = ASGITransport.__aexit__
 
 
-# Store original ASGITransport.__init__
-_original_asgi_transport_init = ASGITransport.__init__
+async def _lifespan_aenter(self: Any) -> Any:
+    """Start lifespan events when entering the transport context."""
+    manager = LifespanManager(self.app)
+    self._lifespan_manager = await manager.__aenter__()
+    return self
 
 
-class LifespanASGITransport(ASGITransport):
-    """ASGITransport wrapper that manages ASGI lifespan events.
-
-    This transport wraps the app with LifespanManager to ensure
-    lifespan startup/shutdown events are properly triggered.
-    """
-
-    _lifespan_manager: LifespanManager | None = None
-
-    def __init__(self, app: Any, **kwargs: Any) -> None:
-        # Store the original app for lifespan management
-        self._original_app = app
+async def _lifespan_aexit(self: Any, *args: Any) -> None:
+    """Stop lifespan events when exiting the transport context."""
+    manager: LifespanManager | None = getattr(self, "_lifespan_manager", None)
+    if manager is not None:
+        await manager.__aexit__(*args)
         self._lifespan_manager = None
-        super().__init__(app, **kwargs)
-
-    async def __aenter__(self) -> "LifespanASGITransport":
-        """Start lifespan events when entering context."""
-        self._lifespan_manager = LifespanManager(self._original_app)
-        await self._lifespan_manager.__aenter__()
-        # Update the app to use the managed app
-        self.app = self._lifespan_manager._app
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        """Stop lifespan events when exiting context."""
-        if self._lifespan_manager:
-            await self._lifespan_manager.__aexit__(*args)
+    await _original_aexit(self, *args)
 
 
 @pytest.fixture(autouse=True)
 def patch_asgi_transport(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Patch ASGITransport to use LifespanASGITransport for proper lifespan handling."""
-    monkeypatch.setattr("httpx.ASGITransport", LifespanASGITransport)
-    monkeypatch.setattr("httpx._transports.asgi.ASGITransport", LifespanASGITransport)
-    # Also patch the test module's namespace since it imports ASGITransport at module level
-    monkeypatch.setattr(
-        "tests.unit.api.test_dependencies_lifespan.ASGITransport", LifespanASGITransport
-    )
-    # Debug
-    import tests.unit.api.test_dependencies_lifespan as test_mod
-    print(f"DEBUG: test module ASGITransport = {test_mod.ASGITransport}")
+    """Patch ASGITransport class methods for proper lifespan handling."""
+    monkeypatch.setattr(ASGITransport, "__aenter__", _lifespan_aenter)
+    monkeypatch.setattr(ASGITransport, "__aexit__", _lifespan_aexit)
