@@ -1,39 +1,58 @@
-"""SSE (Server-Sent Events) event formatting."""
+"""Server-Sent Events (SSE) broadcaster for fan-out publish-subscribe pattern."""
 
-from dataclasses import dataclass
+import asyncio
+from typing import Any, TypeAlias
+
+# Type alias for SSE events (dict-based events)
+SSEEvent: TypeAlias = dict[str, Any]
 
 
-@dataclass
-class SSEEvent:
-    """Represents a Server-Sent Event with proper wire protocol formatting."""
+class SSEBroadcaster:
+    """Broadcaster for Server-Sent Events with subscribe/unsubscribe and fan-out publish."""
 
-    data: str
-    event: str | None = None
-    id: str | None = None
-    retry: int | None = None
+    def __init__(self) -> None:
+        """Initialize the broadcaster with an empty set of subscribers."""
+        self._subscribers: set[asyncio.Queue[Any]] = set()
 
-    def serialize(self) -> str:
-        """Serialize the event to SSE wire protocol format.
+    @property
+    def subscriber_count(self) -> int:
+        """Return the current number of active subscribers."""
+        return len(self._subscribers)
+
+    def subscribe(self) -> asyncio.Queue[Any]:
+        """
+        Subscribe a new client to receive events.
 
         Returns:
-            Formatted SSE event string ending with double newline.
+            A new asyncio.Queue that will receive published events.
         """
-        lines: list[str] = []
+        queue: asyncio.Queue[Any] = asyncio.Queue()
+        self._subscribers.add(queue)
+        return queue
 
-        # Add fields in correct order: id, event, retry, data
-        if self.id is not None:
-            lines.append(f"id: {self.id}")
+    def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
+        """
+        Unsubscribe a client from receiving events.
 
-        if self.event is not None:
-            lines.append(f"event: {self.event}")
+        Args:
+            queue: The queue to remove from subscribers. If not found, no error is raised.
+        """
+        self._subscribers.discard(queue)
 
-        if self.retry is not None:
-            lines.append(f"retry: {self.retry}")
+    def publish(self, event: dict[str, Any]) -> None:
+        """
+        Publish an event to all subscribers using non-blocking fan-out.
 
-        # Handle multi-line data by splitting on newlines
-        data_lines = self.data.split("\n")
-        for data_line in data_lines:
-            lines.append(f"data: {data_line}")
+        Args:
+            event: The event data to broadcast to all subscribers.
 
-        # Join all lines with newline and add trailing double newline
-        return "\n".join(lines) + "\n\n"
+        Note:
+            Uses put_nowait for non-blocking delivery. If a queue is full,
+            the event is silently dropped for that subscriber.
+        """
+        for queue in self._subscribers:
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                # Silently drop events for full queues
+                pass
