@@ -29,12 +29,12 @@ def register_error_handlers(app: FastAPI) -> None:
             exc: The ValueError exception.
 
         Returns:
-            JSONResponse with 422 status and ErrorResponse body.
+            JSONResponse with 400 status and ErrorResponse body.
         """
         error_message = str(exc) if exc.args else ""
         error_response = ErrorResponse(detail=error_message)
         return JSONResponse(
-            status_code=422,
+            status_code=400,
             content=error_response.model_dump(),
         )
 
