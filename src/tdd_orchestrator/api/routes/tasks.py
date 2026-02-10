@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter()
 
@@ -95,6 +95,21 @@ def get_task_progress() -> dict[str, float]:
     return {}
 
 
+def get_task_detail(task_key: str) -> dict[str, Any] | None:
+    """Get task detail with full attempt history.
+
+    This is a placeholder function that will be replaced with actual
+    database queries. For now, it returns None.
+
+    Args:
+        task_key: The unique task identifier.
+
+    Returns:
+        A dictionary with task details and nested attempts, or None if not found.
+    """
+    return None
+
+
 @router.get("")
 def get_tasks(
     status: TaskStatus | None = Query(None, description="Filter by task status"),
@@ -151,3 +166,22 @@ def get_progress() -> dict[str, float]:
         Returns empty dictionary if no tasks exist.
     """
     return get_task_progress()
+
+
+@router.get("/{task_key}")
+def get_task_detail_endpoint(task_key: str) -> dict[str, Any]:
+    """Get task detail with full attempt history.
+
+    Args:
+        task_key: The unique task identifier.
+
+    Returns:
+        TaskDetailResponse with task details and nested AttemptResponse objects.
+
+    Raises:
+        HTTPException: 404 if task not found.
+    """
+    task_detail = get_task_detail(task_key)
+    if task_detail is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task_detail
