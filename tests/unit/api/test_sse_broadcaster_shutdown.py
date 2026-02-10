@@ -21,9 +21,9 @@ class TestSSEBroadcasterShutdown:
         broadcaster = SSEBroadcaster()
 
         # Subscribe three clients
-        queue1 = await broadcaster.subscribe()
-        queue2 = await broadcaster.subscribe()
-        queue3 = await broadcaster.subscribe()
+        queue1 = await broadcaster.subscribe_async()
+        queue2 = await broadcaster.subscribe_async()
+        queue3 = await broadcaster.subscribe_async()
 
         # Call shutdown
         await broadcaster.shutdown()
@@ -53,7 +53,7 @@ class TestSSEBroadcasterShutdown:
         await broadcaster.shutdown()
 
         # Subscribe after shutdown
-        queue = await broadcaster.subscribe()
+        queue = await broadcaster.subscribe_async()
 
         # Queue should immediately contain sentinel
         sentinel = queue.get_nowait()
@@ -71,22 +71,22 @@ class TestSSEBroadcasterShutdown:
         """
         broadcaster = SSEBroadcaster()
 
-        queue1 = await broadcaster.subscribe()
-        queue2 = await broadcaster.subscribe()
+        queue1 = await broadcaster.subscribe_async()
+        queue2 = await broadcaster.subscribe_async()
 
         event = SSEEvent(data="test message")
 
         # Run publish and unsubscribe concurrently many times to trigger race condition
         async def publish_loop() -> None:
             for _ in range(100):
-                await broadcaster.publish(event)
+                await broadcaster.publish_async(event)
                 await asyncio.sleep(0)
 
         async def unsubscribe_loop() -> None:
             for _ in range(50):
                 # Subscribe and immediately unsubscribe to create churn
-                q = await broadcaster.subscribe()
-                await broadcaster.unsubscribe(q)
+                q = await broadcaster.subscribe_async()
+                await broadcaster.unsubscribe_async(q)
                 await asyncio.sleep(0)
 
         # This should not raise RuntimeError
@@ -105,8 +105,8 @@ class TestSSEBroadcasterShutdown:
         assert error_raised is False, "No RuntimeError should be raised during concurrent operations"
 
         # Cleanup
-        await broadcaster.unsubscribe(queue1)
-        await broadcaster.unsubscribe(queue2)
+        await broadcaster.unsubscribe_async(queue1)
+        await broadcaster.unsubscribe_async(queue2)
 
     @pytest.mark.asyncio
     async def test_publish_after_shutdown_is_noop(self) -> None:
@@ -116,7 +116,7 @@ class TestSSEBroadcasterShutdown:
         """
         broadcaster = SSEBroadcaster()
 
-        queue = await broadcaster.subscribe()
+        queue = await broadcaster.subscribe_async()
 
         # Shutdown
         await broadcaster.shutdown()
@@ -127,7 +127,7 @@ class TestSSEBroadcasterShutdown:
 
         # Publish after shutdown
         event = SSEEvent(data="post-shutdown message")
-        await broadcaster.publish(event)  # Should not raise
+        await broadcaster.publish_async(event)  # Should not raise
 
         # Queue should be empty (no new event)
         assert queue.empty() is True, "Queue should be empty after publish on shut down broadcaster"
@@ -186,10 +186,10 @@ class TestSSEBroadcasterLockProtection:
         assert hasattr(broadcaster, "_lock"), "Broadcaster should have a _lock attribute"
         assert isinstance(broadcaster._lock, asyncio.Lock), "_lock should be an asyncio.Lock"
 
-        queue = await broadcaster.subscribe()
+        queue = await broadcaster.subscribe_async()
         event = SSEEvent(data="test")
-        await broadcaster.publish(event)
-        await broadcaster.unsubscribe(queue)
+        await broadcaster.publish_async(event)
+        await broadcaster.unsubscribe_async(queue)
 
         # If we got here without errors, operations completed successfully
         assert len(broadcaster._subscribers) == 0, "Subscriber should be removed after unsubscribe"
@@ -200,9 +200,9 @@ class TestSSEBroadcasterLockProtection:
         broadcaster = SSEBroadcaster()
 
         async def subscribe_then_unsubscribe() -> bool:
-            queue = await broadcaster.subscribe()
+            queue = await broadcaster.subscribe_async()
             await asyncio.sleep(0)  # Yield to other coroutines
-            await broadcaster.unsubscribe(queue)
+            await broadcaster.unsubscribe_async(queue)
             return True
 
         # Run many concurrent subscribe/unsubscribe operations
@@ -238,7 +238,7 @@ class TestSSEBroadcasterEdgeCases:
         """
         broadcaster = SSEBroadcaster()
 
-        queue = await broadcaster.subscribe()
+        queue = await broadcaster.subscribe_async()
 
         # First shutdown
         await broadcaster.shutdown()
@@ -269,7 +269,7 @@ class TestSSEBroadcasterEdgeCases:
         orphan_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
 
         # Should not raise
-        await broadcaster.unsubscribe(orphan_queue)
+        await broadcaster.unsubscribe_async(orphan_queue)
 
         assert len(broadcaster._subscribers) == 0, "Subscribers should remain empty"
 
@@ -284,7 +284,7 @@ class TestSSEBroadcasterEdgeCases:
         event = SSEEvent(data="orphan message")
 
         # Should not raise
-        await broadcaster.publish(event)
+        await broadcaster.publish_async(event)
 
         assert len(broadcaster._subscribers) == 0, "Subscribers should remain empty"
 
@@ -296,12 +296,12 @@ class TestSSEBroadcasterEdgeCases:
         """
         broadcaster = SSEBroadcaster()
 
-        queue = await broadcaster.subscribe()
+        queue = await broadcaster.subscribe_async()
 
         # First unsubscribe
-        await broadcaster.unsubscribe(queue)
+        await broadcaster.unsubscribe_async(queue)
         assert len(broadcaster._subscribers) == 0, "Subscriber should be removed"
 
         # Second unsubscribe should not raise
-        await broadcaster.unsubscribe(queue)
+        await broadcaster.unsubscribe_async(queue)
         assert len(broadcaster._subscribers) == 0, "Subscribers should remain empty"
