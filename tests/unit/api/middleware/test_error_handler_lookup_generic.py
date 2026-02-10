@@ -226,7 +226,7 @@ class TestHandlerCoexistence:
         assert lookup_response.status_code == 404
         assert lookup_response.json() == {"detail": "Resource not found"}
 
-        assert value_response.status_code == 422
+        assert value_response.status_code == 400
         assert value_response.json() == {"detail": "Invalid value provided"}
 
     def test_all_three_handlers_coexist(self) -> None:
@@ -259,7 +259,7 @@ class TestHandlerCoexistence:
         assert lookup_response.headers["content-type"] == "application/json"
         assert lookup_response.json() == {"detail": "Item missing"}
 
-        assert value_response.status_code == 422
+        assert value_response.status_code == 400
         assert value_response.headers["content-type"] == "application/json"
         assert value_response.json() == {"detail": "Bad input"}
 
@@ -303,5 +303,5 @@ class TestHandlerCoexistence:
 
         # Verify all error handlers work
         assert client.get("/lookup").status_code == 404
-        assert client.get("/value").status_code == 422
+        assert client.get("/value").status_code == 400
         assert client.get("/error").status_code == 500
