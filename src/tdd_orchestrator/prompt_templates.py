@@ -200,6 +200,7 @@ You MUST create the implementation file at EXACTLY this path:
 - Do NOT create subdirectories or packages
 {module_exports_section}
 {existing_impl_section}
+{sibling_tests_section}
 {file_structure_constraint}
 
 {import_convention}
@@ -245,6 +246,7 @@ Review the test output above. Common issues include:
 - Logic errors in the implementation
 - Edge cases not handled
 {test_contract_section}
+{sibling_tests_section}
 {import_convention}
 
 ### Your Task

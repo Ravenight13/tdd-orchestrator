@@ -264,6 +264,74 @@ def test_red_prompt_includes_name_adherence_requirement(
     assert "Do NOT invent alternative names" in result
 
 
+# ---------------------------------------------------------------------------
+# Sibling test discovery in GREEN prompt
+# ---------------------------------------------------------------------------
+
+
+def _setup_sibling_tests(tmp_path: Path) -> dict[str, Any]:
+    """Helper: create a task with a test file and a sibling test file."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    # Current task's test file
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("def test_foo():\n    assert True\n")
+    # Sibling test file with await patterns
+    sibling = test_dir / "test_bar.py"
+    sibling.write_text(
+        "import pytest\n\nasync def test_bar():\n"
+        "    result = await some_func()\n"
+        "    assert result is not None\n"
+    )
+    return {
+        "task_key": "TDD-1",
+        "title": "Test Task",
+        "goal": "Test goal",
+        "test_file": "tests/test_foo.py",
+        "impl_file": "src/foo.py",
+    }
+
+
+def test_green_prompt_includes_sibling_tests_section(tmp_path: Path) -> None:
+    """green() includes SIBLING TESTS section when siblings exist."""
+    task = _setup_sibling_tests(tmp_path)
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "SIBLING TESTS" in result
+    assert "test_bar.py" in result
+
+
+def test_green_prompt_omits_sibling_section_when_no_siblings(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() omits sibling section when no sibling test files exist."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("def test_foo():\n    assert True\n")
+
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "SIBLING TESTS" not in result
+
+
+def test_green_prompt_sibling_section_includes_await_hints(tmp_path: Path) -> None:
+    """green() sibling section extracts await patterns as contract hints."""
+    task = _setup_sibling_tests(tmp_path)
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "await some_func()" in result
+    assert "async contracts" in result
+
+
+def test_green_retry_includes_sibling_tests_section(tmp_path: Path) -> None:
+    """build_green_retry() includes SIBLING TESTS section when siblings exist."""
+    task = _setup_sibling_tests(tmp_path)
+    result = PromptBuilder.build_green_retry(
+        task, "test output", attempt=2, previous_failure="error",
+        base_dir=tmp_path,
+    )
+    assert "SIBLING TESTS" in result
+    assert "test_bar.py" in result
+
+
 def test_read_file_safe_rejects_path_traversal(tmp_path: Path) -> None:
     """_read_file_safe rejects paths that escape base_dir."""
     sensitive_dir = tmp_path / "sensitive"

@@ -135,6 +135,28 @@ class CodeVerifier:
 
         return await self.ast_checker.check_file(impl_path)
 
+    async def run_pytest_on_files(self, test_files: list[str]) -> tuple[bool, str]:
+        """Run pytest on a list of specific test files.
+
+        Used for sibling test verification — checking that tests from other
+        tasks sharing the same implementation module still pass.
+
+        Args:
+            test_files: List of test file paths (relative or absolute).
+
+        Returns:
+            Tuple of (passed, output). Returns (True, message) for empty list.
+        """
+        if not test_files:
+            return True, "No sibling test files to check"
+
+        paths = [str(self._resolve_path(f)) for f in test_files]
+        logger.debug("Running pytest on sibling files: %s", paths)
+
+        return await self._run_command(
+            self._resolve_tool("pytest"), *paths, "-v", "--tb=short"
+        )
+
     async def verify_all(self, test_file: str, impl_file: str) -> VerifyResult:
         """Run all verification tools in parallel.
 

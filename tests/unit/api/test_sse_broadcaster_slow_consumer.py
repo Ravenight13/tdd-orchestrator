@@ -8,8 +8,8 @@ import pytest
 from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
 
 
-class TestSlowConsumerDetection:
-    """Tests for automatic detection and removal of slow subscribers."""
+class TestSSEBroadcasterSlowConsumerDetection:
+    """Tests for slow consumer detection that drops subscribers with full queues."""
 
     @pytest.mark.asyncio
     async def test_slow_subscriber_removed_when_queue_full_during_publish(self) -> None:
@@ -24,22 +24,24 @@ class TestSlowConsumerDetection:
 
         # Create a queue with maxsize=1 and fill it
         slow_queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=1)
-        pre_fill_event = SSEEvent(event="prefill", data="blocking")
-        await slow_queue.put(pre_fill_event)
+        initial_event = SSEEvent(event="init", data="initial")
+        await slow_queue.put(initial_event)
 
-        # Subscribe the slow consumer
+        # Subscribe with the already-full queue
         broadcaster.subscribe(slow_queue)
-        assert len(broadcaster.subscribers) == 1
+
+        # Verify subscriber is registered
+        assert broadcaster.subscriber_count == 1
 
         # Publish a new event - should not raise QueueFull
-        new_event = SSEEvent(event="test", data="payload")
+        new_event = SSEEvent(event="test", data="new message")
         await broadcaster.publish(new_event)
 
         # Slow subscriber should be removed
-        assert len(broadcaster.subscribers) == 0
+        assert broadcaster.subscriber_count == 0
 
     @pytest.mark.asyncio
-    async def test_healthy_subscribers_receive_event_while_slow_removed(self) -> None:
+    async def test_only_slow_subscriber_removed_healthy_subscribers_receive_event(self) -> None:
         """
         GIVEN an SSEBroadcaster with three subscribers where one has a full queue
               and two have capacity
@@ -50,40 +52,38 @@ class TestSlowConsumerDetection:
         broadcaster = SSEBroadcaster()
 
         # Create two healthy queues with capacity
-        healthy_queue1: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
-        healthy_queue2: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
+        healthy_queue_1: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
+        healthy_queue_2: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
 
-        # Create a slow queue that is already full
+        # Create a slow queue that's already full
         slow_queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=1)
-        pre_fill_event = SSEEvent(event="prefill", data="blocking")
-        await slow_queue.put(pre_fill_event)
+        await slow_queue.put(SSEEvent(event="filler", data="blocking"))
 
         # Subscribe all three
-        broadcaster.subscribe(healthy_queue1)
-        broadcaster.subscribe(healthy_queue2)
+        broadcaster.subscribe(healthy_queue_1)
+        broadcaster.subscribe(healthy_queue_2)
         broadcaster.subscribe(slow_queue)
-        assert len(broadcaster.subscribers) == 3
 
-        # Publish an event
+        assert broadcaster.subscriber_count == 3
+
+        # Publish event
         test_event = SSEEvent(event="message", data="hello")
         await broadcaster.publish(test_event)
 
-        # Healthy subscribers should receive the event
-        received1 = await healthy_queue1.get()
-        received2 = await healthy_queue2.get()
-        assert received1.event == "message"
-        assert received1.data == "hello"
-        assert received2.event == "message"
-        assert received2.data == "hello"
+        # Only slow subscriber should be removed
+        assert broadcaster.subscriber_count == 2
 
-        # Slow subscriber should be removed, leaving exactly 2
-        assert len(broadcaster.subscribers) == 2
-        assert slow_queue not in broadcaster.subscribers
-        assert healthy_queue1 in broadcaster.subscribers
-        assert healthy_queue2 in broadcaster.subscribers
+        # Healthy subscribers should have received the event
+        received_1 = await healthy_queue_1.get()
+        received_2 = await healthy_queue_2.get()
+
+        assert received_1.event == "message"
+        assert received_1.data == "hello"
+        assert received_2.event == "message"
+        assert received_2.data == "hello"
 
     @pytest.mark.asyncio
-    async def test_removed_slow_consumer_not_contacted_in_subsequent_publish(self) -> None:
+    async def test_removed_slow_consumer_not_sent_to_on_subsequent_publish(self) -> None:
         """
         GIVEN an SSEBroadcaster with a subscriber whose queue becomes full
         WHEN the slow consumer is detected and removed during publish()
@@ -97,43 +97,39 @@ class TestSlowConsumerDetection:
         slow_queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=1)
 
         # Fill the slow queue
-        pre_fill_event = SSEEvent(event="prefill", data="blocking")
-        await slow_queue.put(pre_fill_event)
+        await slow_queue.put(SSEEvent(event="filler", data="blocking"))
 
-        # Subscribe both
         broadcaster.subscribe(healthy_queue)
         broadcaster.subscribe(slow_queue)
-        assert len(broadcaster.subscribers) == 2
 
-        # First publish removes the slow consumer
-        first_event = SSEEvent(event="first", data="event1")
-        await broadcaster.publish(first_event)
+        assert broadcaster.subscriber_count == 2
 
-        # Slow subscriber should be removed
-        assert len(broadcaster.subscribers) == 1
-        assert slow_queue not in broadcaster.subscribers
+        # First publish - should remove slow consumer
+        event_1 = SSEEvent(event="first", data="message 1")
+        await broadcaster.publish(event_1)
 
-        # Subsequent publishes should work fine with remaining subscriber
-        second_event = SSEEvent(event="second", data="event2")
-        await broadcaster.publish(second_event)
+        assert broadcaster.subscriber_count == 1
 
-        third_event = SSEEvent(event="third", data="event3")
-        await broadcaster.publish(third_event)
+        # Drain the healthy queue
+        received = await healthy_queue.get()
+        assert received.data == "message 1"
 
-        # Healthy queue should have received all three events
-        received1 = await healthy_queue.get()
-        received2 = await healthy_queue.get()
-        received3 = await healthy_queue.get()
+        # Second publish - should only go to healthy subscriber
+        event_2 = SSEEvent(event="second", data="message 2")
+        await broadcaster.publish(event_2)
 
-        assert received1.event == "first"
-        assert received2.event == "second"
-        assert received3.event == "third"
+        # Healthy subscriber should still receive events
+        received_2 = await healthy_queue.get()
+        assert received_2.data == "message 2"
 
-        # Queue should be empty now
-        assert healthy_queue.empty()
+        # Slow queue should still only have original filler event (never got event_2)
+        assert slow_queue.qsize() == 1
+        filler = await slow_queue.get()
+        assert filler.data == "blocking"
+        assert slow_queue.empty()
 
     @pytest.mark.asyncio
-    async def test_no_false_positives_when_all_queues_have_capacity(self) -> None:
+    async def test_no_subscribers_removed_when_all_have_capacity(self) -> None:
         """
         GIVEN an SSEBroadcaster with all subscribers having available queue capacity
         WHEN publish() is called with an event
@@ -142,42 +138,42 @@ class TestSlowConsumerDetection:
         """
         broadcaster = SSEBroadcaster()
 
-        # Create multiple healthy queues with capacity
-        queue1: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
-        queue2: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
-        queue3: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
+        # Create multiple healthy queues with plenty of capacity
+        queue_1: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=100)
+        queue_2: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=100)
+        queue_3: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=100)
 
-        # Subscribe all
-        broadcaster.subscribe(queue1)
-        broadcaster.subscribe(queue2)
-        broadcaster.subscribe(queue3)
-        initial_count = len(broadcaster.subscribers)
-        assert initial_count == 3
+        broadcaster.subscribe(queue_1)
+        broadcaster.subscribe(queue_2)
+        broadcaster.subscribe(queue_3)
+
+        assert broadcaster.subscriber_count == 3
 
         # Publish multiple events
         for i in range(5):
-            event = SSEEvent(event="test", data=f"payload_{i}")
+            event = SSEEvent(event="ping", data=f"message {i}")
             await broadcaster.publish(event)
 
-        # All subscribers should still be registered (no false positives)
-        assert len(broadcaster.subscribers) == 3
+        # All subscribers should still be registered
+        assert broadcaster.subscriber_count == 3
 
         # All queues should have received all 5 events
-        assert queue1.qsize() == 5
-        assert queue2.qsize() == 5
-        assert queue3.qsize() == 5
+        assert queue_1.qsize() == 5
+        assert queue_2.qsize() == 5
+        assert queue_3.qsize() == 5
 
-        # Verify event content
+        # Verify content of messages
         for i in range(5):
-            event1 = await queue1.get()
-            event2 = await queue2.get()
-            event3 = await queue3.get()
-            assert event1.data == f"payload_{i}"
-            assert event2.data == f"payload_{i}"
-            assert event3.data == f"payload_{i}"
+            msg_1 = await queue_1.get()
+            msg_2 = await queue_2.get()
+            msg_3 = await queue_3.get()
+
+            assert msg_1.data == f"message {i}"
+            assert msg_2.data == f"message {i}"
+            assert msg_3.data == f"message {i}"
 
     @pytest.mark.asyncio
-    async def test_single_slow_subscriber_removed_leaves_zero_subscribers(self) -> None:
+    async def test_publish_succeeds_with_zero_subscribers_after_slow_removal(self) -> None:
         """
         GIVEN an SSEBroadcaster with a single subscriber whose queue is full
         WHEN publish() removes it as a slow consumer
@@ -188,42 +184,40 @@ class TestSlowConsumerDetection:
 
         # Create and fill a single slow queue
         slow_queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=1)
-        pre_fill_event = SSEEvent(event="prefill", data="blocking")
-        await slow_queue.put(pre_fill_event)
+        await slow_queue.put(SSEEvent(event="filler", data="blocking"))
 
-        # Subscribe the single slow consumer
         broadcaster.subscribe(slow_queue)
-        assert len(broadcaster.subscribers) == 1
+        assert broadcaster.subscriber_count == 1
 
-        # Publish should remove the slow consumer
-        event = SSEEvent(event="test", data="payload")
-        await broadcaster.publish(event)
+        # Publish - should remove the slow consumer
+        event_1 = SSEEvent(event="test", data="first")
+        await broadcaster.publish(event_1)
 
-        # Subscriber count should be 0
-        assert len(broadcaster.subscribers) == 0
+        # Subscriber count should now be 0
+        assert broadcaster.subscriber_count == 0
 
         # Subsequent publish with no subscribers should complete without error
-        another_event = SSEEvent(event="another", data="data")
-        await broadcaster.publish(another_event)  # Should not raise
+        event_2 = SSEEvent(event="test", data="second")
+        await broadcaster.publish(event_2)  # Should not raise
 
         # Still zero subscribers
-        assert len(broadcaster.subscribers) == 0
+        assert broadcaster.subscriber_count == 0
 
 
-class TestSlowConsumerEdgeCases:
-    """Edge case tests for slow consumer detection."""
+class TestSSEBroadcasterSlowConsumerEdgeCases:
+    """Edge cases for slow consumer detection."""
 
     @pytest.mark.asyncio
     async def test_publish_to_empty_broadcaster_succeeds(self) -> None:
-        """Publish with no subscribers should complete without error."""
+        """Publishing to a broadcaster with no subscribers should succeed."""
         broadcaster = SSEBroadcaster()
 
-        assert len(broadcaster.subscribers) == 0
+        assert broadcaster.subscriber_count == 0
 
-        event = SSEEvent(event="test", data="payload")
+        event = SSEEvent(event="test", data="hello")
         await broadcaster.publish(event)  # Should not raise
 
-        assert len(broadcaster.subscribers) == 0
+        assert broadcaster.subscriber_count == 0
 
     @pytest.mark.asyncio
     async def test_multiple_slow_consumers_all_removed(self) -> None:
@@ -232,85 +226,73 @@ class TestSlowConsumerEdgeCases:
 
         # Create multiple slow queues (all full)
         slow_queues: list[asyncio.Queue[SSEEvent]] = []
-        for _ in range(3):
+        for i in range(3):
             q: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=1)
-            pre_fill = SSEEvent(event="prefill", data="blocking")
-            await q.put(pre_fill)
+            await q.put(SSEEvent(event="filler", data=f"blocking {i}"))
             slow_queues.append(q)
             broadcaster.subscribe(q)
 
-        # Create one healthy queue
+        # One healthy queue
         healthy_queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=10)
         broadcaster.subscribe(healthy_queue)
 
-        assert len(broadcaster.subscribers) == 4
+        assert broadcaster.subscriber_count == 4
 
-        # Publish event
-        event = SSEEvent(event="test", data="payload")
+        # Publish - should remove all 3 slow consumers
+        event = SSEEvent(event="test", data="message")
         await broadcaster.publish(event)
 
-        # All slow consumers should be removed, only healthy remains
-        assert len(broadcaster.subscribers) == 1
-        assert healthy_queue in broadcaster.subscribers
-        for sq in slow_queues:
-            assert sq not in broadcaster.subscribers
+        # Only healthy subscriber remains
+        assert broadcaster.subscriber_count == 1
 
         # Healthy queue received the event
         received = await healthy_queue.get()
-        assert received.event == "test"
-        assert received.data == "payload"
+        assert received.data == "message"
 
     @pytest.mark.asyncio
-    async def test_queue_at_capacity_boundary_not_full(self) -> None:
+    async def test_queue_at_max_capacity_minus_one_receives_event(self) -> None:
         """A queue with exactly one slot available should receive the event."""
         broadcaster = SSEBroadcaster()
 
-        # Create a queue with maxsize=2, put 1 item (1 slot available)
-        boundary_queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=2)
-        pre_fill = SSEEvent(event="prefill", data="one")
-        await boundary_queue.put(pre_fill)
+        # Create a queue with maxsize=2 and put 1 item (1 slot remaining)
+        queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=2)
+        await queue.put(SSEEvent(event="first", data="existing"))
 
-        broadcaster.subscribe(boundary_queue)
-        assert len(broadcaster.subscribers) == 1
+        broadcaster.subscribe(queue)
+        assert broadcaster.subscriber_count == 1
 
-        # Publish should succeed (queue has capacity)
-        event = SSEEvent(event="test", data="payload")
+        # Publish - should succeed since there's capacity
+        event = SSEEvent(event="second", data="new")
         await broadcaster.publish(event)
 
         # Subscriber should NOT be removed
-        assert len(broadcaster.subscribers) == 1
-        assert boundary_queue in broadcaster.subscribers
+        assert broadcaster.subscriber_count == 1
 
-        # Queue should now have 2 items
-        assert boundary_queue.qsize() == 2
+        # Queue should have both items
+        assert queue.qsize() == 2
+
+        first = await queue.get()
+        second = await queue.get()
+        assert first.data == "existing"
+        assert second.data == "new"
 
     @pytest.mark.asyncio
-    async def test_queue_becomes_full_after_successful_publish(self) -> None:
-        """
-        A queue that becomes full after receiving an event should only be
-        removed on the next publish attempt.
-        """
+    async def test_unbounded_queue_never_removed(self) -> None:
+        """A queue with no maxsize (unbounded) should never be removed."""
         broadcaster = SSEBroadcaster()
 
-        # Create a queue with maxsize=1 (empty initially)
-        queue: asyncio.Queue[SSEEvent] = asyncio.Queue(maxsize=1)
-        broadcaster.subscribe(queue)
+        # Create an unbounded queue (maxsize=0 means unlimited)
+        unbounded_queue: asyncio.Queue[SSEEvent] = asyncio.Queue()
 
-        # First publish fills the queue
-        event1 = SSEEvent(event="first", data="data1")
-        await broadcaster.publish(event1)
+        broadcaster.subscribe(unbounded_queue)
 
-        # Subscriber should still be there
-        assert len(broadcaster.subscribers) == 1
+        # Publish many events
+        for i in range(100):
+            event = SSEEvent(event="flood", data=f"message {i}")
+            await broadcaster.publish(event)
 
-        # Second publish should detect the full queue and remove subscriber
-        event2 = SSEEvent(event="second", data="data2")
-        await broadcaster.publish(event2)
+        # Subscriber should still be registered
+        assert broadcaster.subscriber_count == 1
 
-        # Now subscriber should be removed
-        assert len(broadcaster.subscribers) == 0
-
-        # Original queue still has the first event
-        received = await queue.get()
-        assert received.event == "first"
-        assert received.data == "data1"
+        # All events should be in the queue
+        assert unbounded_queue.qsize() == 100

@@ -120,6 +120,28 @@ async def verify_stage_result(
             mypy_exit_code=0 if verify_result.mypy_passed else 1,
         )
 
+        # --- Sibling test regression check ---
+        if verify_result.all_passed and impl_file:
+            test_file_str = test_file or ""
+            sibling_files = await db.get_sibling_test_files(impl_file, test_file_str)
+            if sibling_files:
+                sib_passed, sib_output = await verifier.run_pytest_on_files(sibling_files)
+                verify_result.siblings_passed = sib_passed
+                verify_result.siblings_output = sib_output
+                if not sib_passed:
+                    logger.warning(
+                        "Sibling test regression for %s: %s",
+                        task.get("task_key", "?"),
+                        ", ".join(sibling_files),
+                    )
+                    return StageResult(
+                        stage=stage,
+                        success=False,
+                        output=result_text,
+                        error=f"Sibling test regression: {', '.join(sibling_files)}",
+                        issues=[{"tool": "pytest-siblings", "output": sib_output}],
+                    )
+
         return StageResult(
             stage=stage,
             success=verify_result.all_passed,

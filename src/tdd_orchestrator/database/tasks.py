@@ -543,6 +543,42 @@ class TaskMixin:
             return updated
 
     # =========================================================================
+    # Sibling Test Discovery
+    # =========================================================================
+
+    async def get_sibling_test_files(
+        self, impl_file: str, exclude_test_file: str
+    ) -> list[str]:
+        """Get test files from other tasks sharing the same impl_file.
+
+        Used during VERIFY to detect sibling test regressions — when a GREEN
+        implementation change breaks tests from a different task that targets
+        the same implementation module.
+
+        Args:
+            impl_file: The implementation file path to match.
+            exclude_test_file: Test file of the current task (excluded).
+
+        Returns:
+            List of sibling test file paths (may be empty).
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return []
+
+        async with self._conn.execute(
+            """
+            SELECT DISTINCT test_file FROM tasks
+            WHERE impl_file = ? AND test_file != ?
+              AND status IN ('complete', 'passing')
+              AND test_file IS NOT NULL
+            """,
+            (impl_file, exclude_test_file),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [str(row["test_file"]) for row in rows]
+
+    # =========================================================================
     # Stale Recovery (task-related)
     # =========================================================================
 

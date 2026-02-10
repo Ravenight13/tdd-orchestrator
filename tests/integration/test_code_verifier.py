@@ -170,6 +170,50 @@ class TestVerifierMissingTools:
         assert "not found" in output.lower()
 
 
+class TestRunPytestOnFiles:
+    """Tests for run_pytest_on_files() sibling test runner."""
+
+    @pytest.fixture
+    def verifier(self, tmp_path) -> CodeVerifier:
+        """Create verifier with temp directory."""
+        return CodeVerifier(base_dir=tmp_path, timeout=10)
+
+    @pytest.mark.asyncio
+    async def test_run_pytest_on_files_empty_list_returns_true(self, verifier) -> None:
+        """Empty file list returns (True, message) without running pytest."""
+        passed, output = await verifier.run_pytest_on_files([])
+        assert passed is True
+        assert "No sibling test files" in output
+
+    @pytest.mark.asyncio
+    async def test_run_pytest_on_files_passes_when_all_pass(self, verifier, tmp_path) -> None:
+        """All passing test files returns (True, output)."""
+        test_a = tmp_path / "test_a.py"
+        test_a.write_text("def test_a(): assert True")
+        test_b = tmp_path / "test_b.py"
+        test_b.write_text("def test_b(): assert True")
+
+        passed, output = await verifier.run_pytest_on_files(
+            [str(test_a), str(test_b)]
+        )
+        assert passed is True
+        assert "2 passed" in output
+
+    @pytest.mark.asyncio
+    async def test_run_pytest_on_files_fails_when_one_fails(self, verifier, tmp_path) -> None:
+        """One failing test file returns (False, output)."""
+        test_ok = tmp_path / "test_ok.py"
+        test_ok.write_text("def test_ok(): assert True")
+        test_bad = tmp_path / "test_bad.py"
+        test_bad.write_text("def test_bad(): assert False")
+
+        passed, output = await verifier.run_pytest_on_files(
+            [str(test_ok), str(test_bad)]
+        )
+        assert passed is False
+        assert "1 failed" in output
+
+
 class TestVerifierPathResolution:
     """Path resolution tests."""
 

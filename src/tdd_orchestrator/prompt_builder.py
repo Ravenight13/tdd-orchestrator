@@ -39,6 +39,8 @@ if TYPE_CHECKING:
 MAX_TEST_FILE_CONTENT = 8000
 MAX_IMPL_FILE_CONTENT = 6000
 MAX_HINTS_CONTENT = 3000
+MAX_SIBLING_FILES = 5
+MAX_SIBLING_HINT_LINES = 10
 
 
 class PromptBuilder:
@@ -98,6 +100,67 @@ class PromptBuilder:
     def _escape_braces(text: str) -> str:
         """Escape curly braces for safe use in str.format() templates."""
         return text.replace("{", "{{").replace("}", "}}")
+
+    @staticmethod
+    def _discover_sibling_tests(
+        base_dir: Path | None,
+        test_file: str,
+    ) -> str:
+        """Discover sibling test files and extract async contract hints.
+
+        Globs test_*.py in the test file's parent directory, reads each sibling
+        for `await` patterns, and builds a prompt section warning the GREEN
+        worker about existing async contracts it must not break.
+
+        Args:
+            base_dir: Project root for resolving paths.
+            test_file: The current task's test file (excluded from results).
+
+        Returns:
+            Prompt section string (empty string if no siblings found).
+        """
+        if not base_dir or not test_file:
+            return ""
+
+        test_path = base_dir / test_file
+        parent = test_path.parent
+        if not parent.exists():
+            return ""
+
+        siblings = sorted(
+            p for p in parent.glob("test_*.py")
+            if p.name != test_path.name
+        )
+        if not siblings:
+            return ""
+
+        sections: list[str] = []
+        for sib in siblings[:MAX_SIBLING_FILES]:
+            rel = str(sib.relative_to(base_dir))
+            hints: list[str] = []
+            try:
+                lines = sib.read_text(encoding="utf-8").splitlines()
+                for line in lines:
+                    stripped = line.strip()
+                    if "await " in stripped and len(hints) < MAX_SIBLING_HINT_LINES:
+                        hints.append(f"    {stripped}")
+            except OSError:
+                continue
+
+            if hints:
+                hint_block = "\n".join(hints)
+                sections.append(f"- `{rel}` (async contracts):\n{hint_block}")
+            else:
+                sections.append(f"- `{rel}`")
+
+        sibling_list = "\n".join(sections)
+        return (
+            "\n## SIBLING TESTS (DO NOT BREAK)\n"
+            "Other test files target the SAME implementation module. "
+            "Your changes MUST NOT break these existing tests.\n"
+            "If a sibling test uses `await`, the method MUST remain `async def`.\n\n"
+            f"{sibling_list}\n"
+        )
 
     @staticmethod
     def _read_file_safe(
@@ -247,6 +310,8 @@ class PromptBuilder:
                 f"```python\n{escaped_impl}\n```\n"
             )
 
+        sibling_tests_section = PromptBuilder._discover_sibling_tests(base_dir, test_file)
+
         return GREEN_PROMPT_TEMPLATE.format(
             goal=task.get("goal", "No goal specified"),
             test_file=test_file,
@@ -255,6 +320,7 @@ class PromptBuilder:
             impl_file_abs=impl_file_abs,
             module_exports_section=module_exports_section,
             existing_impl_section=existing_impl_section,
+            sibling_tests_section=sibling_tests_section,
             test_contract_section=test_contract_section,
             file_structure_constraint=FILE_STRUCTURE_CONSTRAINT,
             import_convention=IMPORT_CONVENTION,
@@ -289,6 +355,8 @@ class PromptBuilder:
             f"```python\n{escaped_test}\n```\n"
         )
 
+        sibling_tests_section = PromptBuilder._discover_sibling_tests(base_dir, test_file)
+
         return GREEN_RETRY_TEMPLATE.format(
             attempt=attempt,
             prev_attempt=attempt - 1,
@@ -297,6 +365,7 @@ class PromptBuilder:
             criteria_text=criteria_text,
             truncated_test_output=truncated_test_output,
             test_contract_section=test_contract_section,
+            sibling_tests_section=sibling_tests_section,
             import_convention=IMPORT_CONVENTION,
         )
 

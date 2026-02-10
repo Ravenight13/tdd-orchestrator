@@ -107,6 +107,8 @@ class VerifyResult:
     mypy_passed: bool
     mypy_output: str
     ast_result: ASTCheckResult | None = field(default=None)
+    siblings_passed: bool | None = field(default=None)  # None = not checked
+    siblings_output: str = field(default="")
 
     @property
     def all_passed(self) -> bool:

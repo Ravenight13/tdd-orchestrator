@@ -129,25 +129,25 @@ class SSEBroadcaster:
             return self._publish_sse_event(event)
 
     async def _publish_sse_event(self, event: SSEEvent) -> None:
-        """Async implementation of SSEEvent publishing with slow consumer detection.
+        """Async implementation of SSEEvent publishing.
+
+        Detects slow consumers whose queues are full and removes them automatically.
 
         Args:
             event: The SSE event to broadcast.
         """
-        # SSEEvent publish with slow consumer detection
         slow_consumers: list[asyncio.Queue[SSEEvent | None]] = []
 
-        # Attempt to deliver to all subscribers
         for queue in list(self._subscribers):
             try:
                 queue.put_nowait(event)
             except asyncio.QueueFull:
-                # Mark for removal
+                # Mark this queue as a slow consumer to be removed
                 slow_consumers.append(queue)
 
-        # Remove slow consumers
-        for slow_queue in slow_consumers:
-            self._subscribers.discard(slow_queue)
+        # Remove all slow consumers from subscribers
+        for queue in slow_consumers:
+            self._subscribers.discard(queue)
 
     async def subscribe_async(self) -> asyncio.Queue[SSEEvent | None]:
         """Subscribe a new client and return their queue (async version for SSEEvent).
