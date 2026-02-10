@@ -155,6 +155,10 @@ RED_PROMPT_TEMPLATE = """You are a test writer. Your ONLY job is to write pytest
 4. Tests should FAIL initially because implementation doesn't exist
 5. Use descriptive test names: test_<behavior>_when_<condition>
 6. Import from the EXACT path shown above: `{import_hint}`
+7. Method and property names MUST match the acceptance criteria exactly:
+   - If criteria name a method (e.g., "serialize"), use that exact name
+   - If criteria specify sync/async, match it exactly
+   - Do NOT invent alternative names for operations described in criteria
 
 {static_review_instructions}
 
@@ -179,7 +183,7 @@ GREEN_PROMPT_TEMPLATE = """You are an implementer. Your ONLY job is to make the 
 
 ## TEST FILE
 {test_file}
-
+{test_contract_section}
 ## CURRENT TEST FAILURES
 ```
 {truncated_output}
@@ -195,6 +199,7 @@ You MUST create the implementation file at EXACTLY this path:
 - Do NOT modify this path -- use the absolute path shown above
 - Do NOT create subdirectories or packages
 {module_exports_section}
+{existing_impl_section}
 {file_structure_constraint}
 
 {import_convention}
@@ -239,7 +244,7 @@ Review the test output above. Common issues include:
 - Incorrect return types
 - Logic errors in the implementation
 - Edge cases not handled
-
+{test_contract_section}
 {import_convention}
 
 ### Your Task

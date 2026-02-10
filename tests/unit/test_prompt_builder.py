@@ -1,4 +1,4 @@
-"""Unit tests for PromptBuilder — REFACTOR stage and absolute path prompts."""
+"""Unit tests for PromptBuilder — REFACTOR stage, absolute paths, and contract visibility."""
 
 from __future__ import annotations
 
@@ -123,3 +123,158 @@ def test_to_import_path_no_src_prefix() -> None:
         PromptBuilder._to_import_path("tdd_orchestrator/api/app.py")
         == "tdd_orchestrator.api.app"
     )
+
+
+# ---------------------------------------------------------------------------
+# GREEN contract visibility tests
+# ---------------------------------------------------------------------------
+
+
+def test_green_prompt_includes_test_file_content(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() with base_dir reads test file content into the prompt."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("def test_add():\n    assert add(1, 2) == 3\n")
+
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "def test_add():" in result
+    assert "assert add(1, 2) == 3" in result
+
+
+def test_green_prompt_fallback_when_test_file_missing(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() shows fallback text when the test file doesn't exist on disk."""
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "test file not available" in result
+
+
+def test_green_prompt_truncates_large_test_files(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() truncates test files exceeding MAX_TEST_FILE_CONTENT."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("x" * 10000)
+
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "# ... (truncated)" in result
+
+
+def test_green_prompt_escapes_braces_in_test_content(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() doesn't crash when test file contains curly braces."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text('data = {"key": "value"}\nassert data["key"] == "value"\n')
+
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    # Content should be present (braces rendered back by .format())
+    assert '"key": "value"' in result
+
+
+def test_green_prompt_includes_acceptance_criteria(
+    task: dict[str, Any],
+) -> None:
+    """green() includes acceptance criteria section when task has criteria."""
+    task["acceptance_criteria"] = '["must serialize to JSON", "must handle None"]'
+    result = PromptBuilder.green(task, "ImportError")
+    assert "ACCEPTANCE CRITERIA" in result
+    assert "must serialize to JSON" in result
+    assert "must handle None" in result
+
+
+def test_green_prompt_omits_hints_when_none(
+    task: dict[str, Any],
+) -> None:
+    """green() omits IMPLEMENTATION HINTS section when hints are None."""
+    task["implementation_hints"] = None
+    result = PromptBuilder.green(task, "ImportError")
+    assert "IMPLEMENTATION HINTS" not in result
+
+
+def test_green_prompt_includes_existing_impl(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() includes existing implementation section when impl file exists."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    impl_file = src_dir / "foo.py"
+    impl_file.write_text("class Foo:\n    pass\n")
+
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "EXISTING IMPLEMENTATION (from prior task)" in result
+    assert "class Foo:" in result
+
+
+def test_green_prompt_no_existing_impl_when_absent(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """green() omits existing impl section when impl file doesn't exist."""
+    result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
+    assert "EXISTING IMPLEMENTATION" not in result
+
+
+def test_green_retry_includes_test_file_content(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """build_green_retry() includes test file content when base_dir provided."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("def test_subtract():\n    assert subtract(5, 3) == 2\n")
+
+    result = PromptBuilder.build_green_retry(
+        task, "test output", attempt=2, previous_failure="AssertionError",
+        base_dir=tmp_path,
+    )
+    assert "def test_subtract():" in result
+    assert "Test File Content (the contract)" in result
+
+
+def test_build_dispatcher_forwards_base_dir_to_retry(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """build(GREEN, attempt=2) forwards base_dir to build_green_retry()."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("def test_multiply():\n    assert multiply(2, 3) == 6\n")
+
+    result = PromptBuilder.build(
+        Stage.GREEN, task,
+        test_output="failures", attempt=2, previous_failure="error",
+        base_dir=tmp_path,
+    )
+    assert "def test_multiply():" in result
+
+
+def test_red_prompt_includes_name_adherence_requirement(
+    task: dict[str, Any],
+) -> None:
+    """red() prompt includes the name adherence requirement (rule #7)."""
+    result = PromptBuilder.red(task)
+    assert "Method and property names MUST match the acceptance criteria exactly" in result
+    assert "Do NOT invent alternative names" in result
+
+
+def test_read_file_safe_rejects_path_traversal(tmp_path: Path) -> None:
+    """_read_file_safe rejects paths that escape base_dir."""
+    sensitive_dir = tmp_path / "sensitive"
+    sensitive_dir.mkdir()
+    secret = sensitive_dir / "secret.txt"
+    secret.write_text("SECRET_DATA")
+
+    base_dir = tmp_path / "project"
+    base_dir.mkdir()
+
+    result = PromptBuilder._read_file_safe(
+        base_dir, "../sensitive/secret.txt", 1000, "FALLBACK",
+    )
+    assert result == "FALLBACK"

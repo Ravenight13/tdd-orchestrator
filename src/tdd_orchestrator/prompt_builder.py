@@ -36,6 +36,10 @@ from .prompt_templates import (
 if TYPE_CHECKING:
     from .models import Stage
 
+MAX_TEST_FILE_CONTENT = 8000
+MAX_IMPL_FILE_CONTENT = 6000
+MAX_HINTS_CONTENT = 3000
+
 
 class PromptBuilder:
     """Build focused prompts for each TDD pipeline stage.
@@ -89,6 +93,36 @@ class PromptBuilder:
             return parsed if isinstance(parsed, list) else []
         except (json.JSONDecodeError, TypeError):
             return []
+
+    @staticmethod
+    def _escape_braces(text: str) -> str:
+        """Escape curly braces for safe use in str.format() templates."""
+        return text.replace("{", "{{").replace("}", "}}")
+
+    @staticmethod
+    def _read_file_safe(
+        base_dir: Path | None,
+        relative_path: str,
+        max_chars: int,
+        fallback: str,
+    ) -> str:
+        """Read a file with truncation and fallback."""
+        if not base_dir or not relative_path:
+            return fallback
+        file_path = (base_dir / relative_path).resolve()
+        try:
+            file_path.relative_to(base_dir.resolve())
+        except ValueError:
+            return fallback
+        if not file_path.exists():
+            return fallback
+        try:
+            raw = file_path.read_text(encoding="utf-8")
+            if len(raw) > max_chars:
+                return raw[:max_chars] + "\n# ... (truncated)"
+            return raw
+        except OSError:
+            return fallback
 
     @staticmethod
     def red(task: dict[str, Any], base_dir: Path | None = None) -> str:
@@ -165,13 +199,63 @@ class PromptBuilder:
 
         impl_file_abs = str(base_dir / impl_file) if base_dir else impl_file
 
+        # --- Build test contract section ---
+        test_file = task.get("test_file", "test_file.py")
+        raw_test = PromptBuilder._read_file_safe(
+            base_dir, test_file, MAX_TEST_FILE_CONTENT,
+            "# (test file not available -- use test failures below)",
+        )
+        escaped_test = PromptBuilder._escape_braces(raw_test)
+
+        test_contract_section = (
+            "\n## TEST SOURCE CODE (the contract your implementation MUST satisfy)\n"
+            f"```python\n{escaped_test}\n```\n\n"
+            "Read this carefully. Your implementation MUST:\n"
+            "- Match every method name, property, and function signature exactly as tested\n"
+            "- Match sync vs async (if tests use `await`, implement as `async def`)\n"
+            "- Return the exact types tested by assertions\n"
+            "- Accept the exact parameter signatures used in test calls\n"
+        )
+
+        criteria = PromptBuilder._parse_criteria(task.get("acceptance_criteria"))
+        if criteria:
+            criteria_lines = "\n".join(f"- {c}" for c in criteria)
+            test_contract_section += (
+                f"\n## ACCEPTANCE CRITERIA\n"
+                f"{PromptBuilder._escape_braces(criteria_lines)}\n"
+            )
+
+        hints_raw = task.get("implementation_hints") or ""
+        if isinstance(hints_raw, str) and hints_raw.strip():
+            hints_text = hints_raw[:MAX_HINTS_CONTENT]
+            test_contract_section += (
+                f"\n## IMPLEMENTATION HINTS\n"
+                f"{PromptBuilder._escape_braces(hints_text)}\n"
+            )
+
+        # --- Build existing impl section ---
+        existing_impl_section = ""
+        raw_impl = PromptBuilder._read_file_safe(
+            base_dir, impl_file, MAX_IMPL_FILE_CONTENT, "",
+        )
+        if raw_impl:
+            escaped_impl = PromptBuilder._escape_braces(raw_impl)
+            existing_impl_section = (
+                "\n## EXISTING IMPLEMENTATION (from prior task)\n"
+                "This file already exists. PRESERVE all existing classes, methods, "
+                "and exports while adding new functionality required by the tests.\n"
+                f"```python\n{escaped_impl}\n```\n"
+            )
+
         return GREEN_PROMPT_TEMPLATE.format(
             goal=task.get("goal", "No goal specified"),
-            test_file=task.get("test_file", "test_file.py"),
+            test_file=test_file,
             truncated_output=truncated_output,
             impl_file=impl_file,
             impl_file_abs=impl_file_abs,
             module_exports_section=module_exports_section,
+            existing_impl_section=existing_impl_section,
+            test_contract_section=test_contract_section,
             file_structure_constraint=FILE_STRUCTURE_CONSTRAINT,
             import_convention=IMPORT_CONVENTION,
             type_annotation_instructions=TYPE_ANNOTATION_INSTRUCTIONS,
@@ -183,6 +267,7 @@ class PromptBuilder:
         test_output: str,
         attempt: int,
         previous_failure: str,
+        base_dir: Path | None = None,
     ) -> str:
         """Build GREEN prompt for retry attempt with failure context."""
         impl_file = task.get("impl_file", "")
@@ -192,6 +277,18 @@ class PromptBuilder:
         truncated_failure = previous_failure[:3000] if previous_failure else "No output captured"
         truncated_test_output = test_output[:3000] if test_output else "No test output"
 
+        # Build test contract section for retry
+        test_file = task.get("test_file", "test_file.py")
+        raw_test = PromptBuilder._read_file_safe(
+            base_dir, test_file, MAX_TEST_FILE_CONTENT,
+            "# (test file not available)",
+        )
+        escaped_test = PromptBuilder._escape_braces(raw_test)
+        test_contract_section = (
+            "\n### Test File Content (the contract)\n"
+            f"```python\n{escaped_test}\n```\n"
+        )
+
         return GREEN_RETRY_TEMPLATE.format(
             attempt=attempt,
             prev_attempt=attempt - 1,
@@ -199,6 +296,7 @@ class PromptBuilder:
             impl_file=impl_file,
             criteria_text=criteria_text,
             truncated_test_output=truncated_test_output,
+            test_contract_section=test_contract_section,
             import_convention=IMPORT_CONVENTION,
         )
 
@@ -283,7 +381,9 @@ class PromptBuilder:
             attempt = kwargs.get("attempt", 1)
             if attempt > 1:
                 previous_failure = kwargs.get("previous_failure", "")
-                return PromptBuilder.build_green_retry(task, test_output, attempt, previous_failure)
+                return PromptBuilder.build_green_retry(
+                    task, test_output, attempt, previous_failure, base_dir=base_dir,
+                )
             return PromptBuilder.green(task, test_output, base_dir=base_dir)
 
         if stage == StageEnum.VERIFY or stage == StageEnum.RE_VERIFY:
