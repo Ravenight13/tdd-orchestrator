@@ -140,14 +140,14 @@ RED_PROMPT_TEMPLATE = """You are a test writer. Your ONLY job is to write pytest
 
 ## ACCEPTANCE CRITERIA
 {criteria_text}
-{module_exports_section}
+{module_exports_section}{existing_api_section}
 ## FILES
 - **Test file to create**: {test_file}
 - **Implementation will be at**: {impl_file}
 - **Import path**: `{import_hint}`
 
 {import_convention}
-
+{sibling_tests_section}
 ## REQUIREMENTS
 1. Write a pytest test class with test methods
 2. Each acceptance criterion should have at least one test

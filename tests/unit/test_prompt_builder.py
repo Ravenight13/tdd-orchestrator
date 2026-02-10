@@ -332,6 +332,103 @@ def test_green_retry_includes_sibling_tests_section(tmp_path: Path) -> None:
     assert "test_bar.py" in result
 
 
+# ---------------------------------------------------------------------------
+# RED stage sibling awareness and impl signature tests
+# ---------------------------------------------------------------------------
+
+
+def test_red_prompt_includes_sibling_tests_section(tmp_path: Path) -> None:
+    """red() includes SIBLING TESTS section when siblings exist."""
+    task = _setup_sibling_tests(tmp_path)
+    result = PromptBuilder.red(task, base_dir=tmp_path)
+    assert "SIBLING TESTS" in result
+    assert "test_bar.py" in result
+
+
+def test_red_prompt_omits_sibling_section_when_no_siblings(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """red() omits sibling section when no sibling test files exist."""
+    test_dir = tmp_path / "tests"
+    test_dir.mkdir()
+    test_file = test_dir / "test_foo.py"
+    test_file.write_text("def test_foo():\n    assert True\n")
+
+    result = PromptBuilder.red(task, base_dir=tmp_path)
+    assert "SIBLING TESTS" not in result
+
+
+def test_red_prompt_sibling_uses_match_language(tmp_path: Path) -> None:
+    """red() sibling section uses MATCH language, not DO NOT BREAK."""
+    task = _setup_sibling_tests(tmp_path)
+    result = PromptBuilder.red(task, base_dir=tmp_path)
+    assert "MATCH EXISTING CONTRACTS" in result
+    assert "DO NOT BREAK" not in result
+
+
+def test_red_prompt_includes_existing_api_signatures(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """red() includes API signatures when impl file exists."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    impl_file = src_dir / "foo.py"
+    impl_file.write_text(
+        "def init_dependencies(db: object, broadcaster: object) -> None:\n"
+        "    pass\n\n"
+        "class FooService:\n"
+        "    pass\n"
+    )
+
+    result = PromptBuilder.red(task, base_dir=tmp_path)
+    assert "EXISTING API SIGNATURES" in result
+    assert "def init_dependencies(db: object, broadcaster: object) -> None:" in result
+    assert "class FooService:" in result
+
+
+def test_red_prompt_omits_api_signatures_when_no_impl_file(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """red() omits API signatures section when impl file doesn't exist."""
+    result = PromptBuilder.red(task, base_dir=tmp_path)
+    assert "EXISTING API SIGNATURES" not in result
+
+
+def test_red_prompt_api_signatures_escapes_braces(
+    task: dict[str, Any], tmp_path: Path,
+) -> None:
+    """red() doesn't crash when impl file has type hints with braces."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    impl_file = src_dir / "foo.py"
+    impl_file.write_text(
+        "def get_config() -> dict[str, Any]:\n"
+        "    return {}\n"
+    )
+
+    # Should not raise KeyError from .format()
+    result = PromptBuilder.red(task, base_dir=tmp_path)
+    assert "EXISTING API SIGNATURES" in result
+    assert "dict[str, Any]" in result
+
+
+def test_extract_impl_signatures_captures_async_def(tmp_path: Path) -> None:
+    """_extract_impl_signatures() captures async def distinctly from def."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    impl_file = src_dir / "foo.py"
+    impl_file.write_text(
+        "def sync_func() -> None:\n"
+        "    pass\n\n"
+        "async def async_func() -> str:\n"
+        "    return 'ok'\n"
+    )
+
+    result = PromptBuilder._extract_impl_signatures(tmp_path, "src/foo.py")
+    assert "def sync_func() -> None:" in result
+    assert "async def async_func() -> str:" in result
+
+
 def test_read_file_safe_rejects_path_traversal(tmp_path: Path) -> None:
     """_read_file_safe rejects paths that escape base_dir."""
     sensitive_dir = tmp_path / "sensitive"

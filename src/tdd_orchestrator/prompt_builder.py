@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from .prompt_templates import (
     FILE_STRUCTURE_CONSTRAINT,
@@ -105,16 +105,20 @@ class PromptBuilder:
     def _discover_sibling_tests(
         base_dir: Path | None,
         test_file: str,
+        stage_hint: Literal["green", "red"] = "green",
     ) -> str:
         """Discover sibling test files and extract async contract hints.
 
         Globs test_*.py in the test file's parent directory, reads each sibling
-        for `await` patterns, and builds a prompt section warning the GREEN
-        worker about existing async contracts it must not break.
+        for `await` patterns, and builds a prompt section warning the worker
+        about existing async contracts.
 
         Args:
             base_dir: Project root for resolving paths.
             test_file: The current task's test file (excluded from results).
+            stage_hint: Controls header/description language.
+                ``"green"`` (default) warns about not breaking siblings.
+                ``"red"`` instructs matching existing contracts.
 
         Returns:
             Prompt section string (empty string if no siblings found).
@@ -154,12 +158,75 @@ class PromptBuilder:
                 sections.append(f"- `{rel}`")
 
         sibling_list = "\n".join(sections)
+
+        if stage_hint == "red":
+            return (
+                "\n## SIBLING TESTS (MATCH EXISTING CONTRACTS)\n"
+                "Other test files target the SAME implementation module. "
+                "These tests have already established the API contract "
+                "(function signatures, sync/async, parameter names). "
+                "Your tests MUST use the SAME signatures.\n"
+                "If a sibling test uses `await`, your tests MUST also use "
+                "`await` for that function.\n\n"
+                f"{sibling_list}\n"
+            )
+
         return (
             "\n## SIBLING TESTS (DO NOT BREAK)\n"
             "Other test files target the SAME implementation module. "
             "Your changes MUST NOT break these existing tests.\n"
             "If a sibling test uses `await`, the method MUST remain `async def`.\n\n"
             f"{sibling_list}\n"
+        )
+
+    MAX_IMPL_SIGNATURES = 30
+
+    @staticmethod
+    def _extract_impl_signatures(base_dir: Path | None, impl_file: str) -> str:
+        """Extract function/class signatures from an existing implementation file.
+
+        Reads the implementation file and extracts lines starting with ``def ``,
+        ``async def ``, or ``class `` (plus preceding decorator lines).  The
+        result is wrapped in a prompt section that instructs the LLM to match
+        these exact signatures.
+
+        Args:
+            base_dir: Project root for resolving paths.
+            impl_file: Relative path to the implementation file.
+
+        Returns:
+            Formatted prompt section, or empty string if file doesn't exist
+            or contains no signatures.
+        """
+        raw = PromptBuilder._read_file_safe(
+            base_dir, impl_file, MAX_IMPL_FILE_CONTENT, "",
+        )
+        if not raw:
+            return ""
+
+        lines = raw.splitlines()
+        signatures: list[str] = []
+        prev_line = ""
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith(("def ", "async def ", "class ")):
+                if prev_line.strip().startswith("@"):
+                    signatures.append(prev_line)
+                signatures.append(line)
+                if len(signatures) >= PromptBuilder.MAX_IMPL_SIGNATURES:
+                    break
+            prev_line = line
+
+        if not signatures:
+            return ""
+
+        sig_block = PromptBuilder._escape_braces("\n".join(signatures))
+        return (
+            "\n## EXISTING API SIGNATURES\n"
+            "The implementation file already exists. Your tests MUST use "
+            "these exact function signatures. Do NOT assume different "
+            "parameter names, types, or sync/async.\n"
+            f"```python\n{sig_block}\n```\n"
         )
 
     @staticmethod
@@ -221,10 +288,17 @@ class PromptBuilder:
         test_file = task.get("test_file", "test_file.py")
         test_file_abs = str(base_dir / test_file) if base_dir else test_file
 
+        sibling_tests_section = PromptBuilder._discover_sibling_tests(
+            base_dir, test_file, stage_hint="red",
+        )
+        existing_api_section = PromptBuilder._extract_impl_signatures(base_dir, impl_file)
+
         return RED_PROMPT_TEMPLATE.format(
             goal=task.get("goal", "No goal specified"),
             criteria_text=criteria_text,
             module_exports_section=module_exports_section,
+            existing_api_section=existing_api_section,
+            sibling_tests_section=sibling_tests_section,
             test_file=test_file,
             impl_file=impl_file,
             import_hint=import_hint,
