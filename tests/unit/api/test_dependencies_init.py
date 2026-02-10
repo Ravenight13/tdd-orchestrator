@@ -1,6 +1,16 @@
-"""Tests for dependency lifecycle management (init/shutdown)."""
+"""Tests for dependency lifecycle management (init/shutdown).
+
+This module tests the LIFECYCLE scenarios for dependency management:
+init -> use -> shutdown -> re-init cycles, idempotency, and edge cases.
+
+Individual getter behavior (yields/raises, type checks, FastAPI compatibility)
+is covered in test_dependencies_deps.py and is NOT duplicated here.
+"""
 
 from __future__ import annotations
+
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -16,326 +26,319 @@ class TestDependenciesBeforeInit:
     """Tests for accessing dependencies before init_dependencies() is called."""
 
     @pytest.fixture(autouse=True)
-    async def ensure_shutdown(self) -> None:
+    def ensure_shutdown(self) -> Any:
         """Ensure dependencies are in uninitialized state before each test."""
-        # Shutdown first to reset any state from previous tests
-        await shutdown_dependencies()
+        shutdown_dependencies()
         yield
-        # Cleanup after test
-        await shutdown_dependencies()
+        shutdown_dependencies()
 
-    async def test_get_db_dep_raises_runtime_error_when_not_initialized(self) -> None:
-        """GIVEN init_dependencies() has not been called.
+    async def test_get_db_dep_raises_runtime_error_when_never_initialized(self) -> None:
+        """GIVEN init_dependencies() has never been called.
 
-        WHEN get_db_dep() is called
-        THEN it raises RuntimeError indicating dependencies are not initialized.
+        WHEN get_db_dep() is consumed as an async generator
+        THEN it raises RuntimeError indicating db is uninitialized.
         """
-        with pytest.raises(RuntimeError) as exc_info:
-            get_db_dep()
-        assert "not initialized" in str(exc_info.value).lower()
+        gen = get_db_dep()
+        with pytest.raises(RuntimeError, match="(?i)uninitialized"):
+            await gen.__anext__()
 
-    async def test_get_broadcaster_dep_raises_runtime_error_when_not_initialized(
+    async def test_get_broadcaster_dep_raises_runtime_error_when_never_initialized(
         self,
     ) -> None:
-        """GIVEN init_dependencies() has not been called.
+        """GIVEN init_dependencies() has never been called.
 
         WHEN get_broadcaster_dep() is called
-        THEN it raises RuntimeError indicating dependencies are not initialized.
+        THEN it raises RuntimeError indicating broadcaster is uninitialized.
         """
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(RuntimeError, match="(?i)uninitialized"):
             get_broadcaster_dep()
-        assert "not initialized" in str(exc_info.value).lower()
+
+    async def test_both_getters_raise_before_init(self) -> None:
+        """GIVEN init_dependencies() has never been called.
+
+        WHEN both getters are invoked
+        THEN both raise RuntimeError (neither leaks a stale singleton).
+        """
+        gen = get_db_dep()
+        with pytest.raises(RuntimeError):
+            await gen.__anext__()
+
+        with pytest.raises(RuntimeError):
+            get_broadcaster_dep()
 
 
 class TestInitDependencies:
-    """Tests for init_dependencies() behavior."""
+    """Tests for init_dependencies() creating usable singletons."""
 
     @pytest.fixture(autouse=True)
-    async def cleanup_dependencies(self) -> None:
-        """Cleanup dependencies after each test."""
-        await shutdown_dependencies()
+    def cleanup_dependencies(self) -> Any:
+        """Cleanup dependencies before and after each test."""
+        shutdown_dependencies()
         yield
-        await shutdown_dependencies()
+        shutdown_dependencies()
 
-    async def test_init_creates_db_singleton_when_called_with_valid_path(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN a valid db_path using tmp_path fixture.
+    async def test_init_makes_db_available(self) -> None:
+        """GIVEN mock db and broadcaster instances.
 
-        WHEN init_dependencies() is called and completes
-        THEN the module-level OrchestratorDB singleton is created and connected.
+        WHEN init_dependencies() is called with them
+        THEN get_db_dep() yields the mock db instance.
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+        init_dependencies(mock_db, mock_broadcaster)
 
-        db = get_db_dep()
-        assert db is not None
-        # Verify it's actually connected by checking the type
-        # The actual type check will validate it's an OrchestratorDB instance
-        assert hasattr(db, "close") or hasattr(db, "conn")
+        gen = get_db_dep()
+        db = await gen.__anext__()
+        assert db is mock_db
 
-    async def test_init_creates_broadcaster_singleton_when_called_with_valid_path(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN a valid db_path using tmp_path fixture.
+    async def test_init_makes_broadcaster_available(self) -> None:
+        """GIVEN mock db and broadcaster instances.
 
-        WHEN init_dependencies() is called and completes
-        THEN the module-level SSEBroadcaster singleton is created.
+        WHEN init_dependencies() is called with them
+        THEN get_broadcaster_dep() returns the mock broadcaster instance.
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+        init_dependencies(mock_db, mock_broadcaster)
 
         broadcaster = get_broadcaster_dep()
-        assert broadcaster is not None
+        assert broadcaster is mock_broadcaster
 
-    async def test_get_db_dep_returns_same_instance_on_subsequent_calls(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN init_dependencies() has been called.
+    async def test_init_makes_both_singletons_available_simultaneously(self) -> None:
+        """GIVEN mock db and broadcaster instances.
 
-        WHEN get_db_dep() is called multiple times
-        THEN it returns the same instance each time.
+        WHEN init_dependencies() is called once
+        THEN both getters return the correct instances in the same test scope.
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+        init_dependencies(mock_db, mock_broadcaster)
 
-        db1 = get_db_dep()
-        db2 = get_db_dep()
-        assert db1 is db2
+        gen = get_db_dep()
+        db = await gen.__anext__()
+        broadcaster = get_broadcaster_dep()
 
-    async def test_get_broadcaster_dep_returns_same_instance_on_subsequent_calls(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN init_dependencies() has been called.
-
-        WHEN get_broadcaster_dep() is called multiple times
-        THEN it returns the same instance each time.
-        """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
-
-        broadcaster1 = get_broadcaster_dep()
-        broadcaster2 = get_broadcaster_dep()
-        assert broadcaster1 is broadcaster2
+        assert db is mock_db
+        assert broadcaster is mock_broadcaster
 
 
 class TestInitIdempotency:
     """Tests for init_dependencies() idempotency."""
 
     @pytest.fixture(autouse=True)
-    async def cleanup_dependencies(self) -> None:
-        """Cleanup dependencies after each test."""
-        await shutdown_dependencies()
+    def cleanup_dependencies(self) -> Any:
+        """Cleanup dependencies before and after each test."""
+        shutdown_dependencies()
         yield
-        await shutdown_dependencies()
+        shutdown_dependencies()
 
-    async def test_init_is_idempotent_for_db_singleton(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
+    async def test_double_init_with_same_args_preserves_db_identity(self) -> None:
         """GIVEN init_dependencies() has already been called.
 
-        WHEN init_dependencies() is called a second time
-        THEN it is idempotent and the existing OrchestratorDB singleton remains
-        the same object (verified via `is` identity check).
+        WHEN init_dependencies() is called a second time with the same args
+        THEN the db singleton remains the same object (identity via `is`).
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
-        db_first = get_db_dep()
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
 
-        # Call init again
-        await init_dependencies(db_path=str(db_path))
-        db_second = get_db_dep()
+        init_dependencies(mock_db, mock_broadcaster)
+        gen1 = get_db_dep()
+        db_first = await gen1.__anext__()
+
+        init_dependencies(mock_db, mock_broadcaster)
+        gen2 = get_db_dep()
+        db_second = await gen2.__anext__()
 
         assert db_first is db_second
 
-    async def test_init_is_idempotent_for_broadcaster_singleton(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
+    async def test_double_init_with_same_args_preserves_broadcaster_identity(self) -> None:
         """GIVEN init_dependencies() has already been called.
 
-        WHEN init_dependencies() is called a second time
-        THEN it is idempotent and the existing SSEBroadcaster singleton remains
-        the same object (verified via `is` identity check).
+        WHEN init_dependencies() is called a second time with the same args
+        THEN the broadcaster singleton remains the same object (identity via `is`).
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+
+        init_dependencies(mock_db, mock_broadcaster)
         broadcaster_first = get_broadcaster_dep()
 
-        # Call init again
-        await init_dependencies(db_path=str(db_path))
+        init_dependencies(mock_db, mock_broadcaster)
         broadcaster_second = get_broadcaster_dep()
 
         assert broadcaster_first is broadcaster_second
+
+    async def test_init_with_different_args_replaces_singletons(self) -> None:
+        """GIVEN init_dependencies() has already been called with instances A.
+
+        WHEN init_dependencies() is called again with different instances B (no shutdown)
+        THEN the getters return the NEW instances B.
+        """
+        mock_db_a = MagicMock(name="db_a")
+        mock_broadcaster_a = MagicMock(name="broadcaster_a")
+        init_dependencies(mock_db_a, mock_broadcaster_a)
+
+        mock_db_b = MagicMock(name="db_b")
+        mock_broadcaster_b = MagicMock(name="broadcaster_b")
+        init_dependencies(mock_db_b, mock_broadcaster_b)
+
+        gen = get_db_dep()
+        db = await gen.__anext__()
+        broadcaster = get_broadcaster_dep()
+
+        assert db is mock_db_b
+        assert broadcaster is mock_broadcaster_b
+        assert db is not mock_db_a
+        assert broadcaster is not mock_broadcaster_a
 
 
 class TestShutdownDependencies:
     """Tests for shutdown_dependencies() behavior."""
 
     @pytest.fixture(autouse=True)
-    async def cleanup_dependencies(self) -> None:
-        """Cleanup dependencies after each test."""
-        await shutdown_dependencies()
+    def cleanup_dependencies(self) -> Any:
+        """Cleanup dependencies before and after each test."""
+        shutdown_dependencies()
         yield
-        await shutdown_dependencies()
+        shutdown_dependencies()
 
-    async def test_shutdown_resets_singletons_to_uninitialized_state(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN init_dependencies() has been called and singletons are active.
+    async def test_shutdown_resets_db_to_uninitialized(self) -> None:
+        """GIVEN init_dependencies() has been called.
 
         WHEN shutdown_dependencies() is called
-        THEN the module-level singletons are reset to their uninitialized state.
+        THEN get_db_dep() raises RuntimeError again.
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+        init_dependencies(mock_db, mock_broadcaster)
 
-        # Verify singletons are initialized
-        db = get_db_dep()
-        broadcaster = get_broadcaster_dep()
-        assert db is not None
-        assert broadcaster is not None
+        shutdown_dependencies()
 
-        # Shutdown
-        await shutdown_dependencies()
-
-        # Verify singletons are now uninitialized
+        gen = get_db_dep()
         with pytest.raises(RuntimeError):
-            get_db_dep()
+            await gen.__anext__()
+
+    async def test_shutdown_resets_broadcaster_to_uninitialized(self) -> None:
+        """GIVEN init_dependencies() has been called.
+
+        WHEN shutdown_dependencies() is called
+        THEN get_broadcaster_dep() raises RuntimeError again.
+        """
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+        init_dependencies(mock_db, mock_broadcaster)
+
+        shutdown_dependencies()
+
         with pytest.raises(RuntimeError):
             get_broadcaster_dep()
 
-    async def test_shutdown_closes_db_connection(
-        self,
-        tmp_path: pytest.TempPathFactory,
-        mocker: pytest.MonkeyPatch,
-    ) -> None:
-        """GIVEN init_dependencies() has been called and singletons are active.
-
-        WHEN shutdown_dependencies() is called
-        THEN the OrchestratorDB connection is closed.
-        """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
-
-        db = get_db_dep()
-        # Create a spy on the close method if it exists
-        close_spy = mocker.spy(db, "close") if hasattr(db, "close") else None
-
-        await shutdown_dependencies()
-
-        if close_spy is not None:
-            close_spy.assert_awaited_once()
-
-    async def test_shutdown_is_safe_noop_when_called_again(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN shutdown_dependencies() has already been called.
-
-        WHEN shutdown_dependencies() is called again
-        THEN it is a safe no-op that does not raise.
-        """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        await init_dependencies(db_path=str(db_path))
-        await shutdown_dependencies()
-
-        # Second shutdown should not raise
-        await shutdown_dependencies()
-        # Third shutdown should also not raise
-        await shutdown_dependencies()
-
-        # Verify state is still uninitialized
-        with pytest.raises(RuntimeError):
-            get_db_dep()
-
-    async def test_shutdown_is_safe_noop_when_never_initialized(self) -> None:
+    async def test_shutdown_without_init_is_safe_noop(self) -> None:
         """GIVEN init_dependencies() was never called.
 
         WHEN shutdown_dependencies() is called
-        THEN it is a safe no-op that does not raise.
+        THEN it does not raise (safe no-op).
         """
         # Should not raise even if never initialized
-        await shutdown_dependencies()
-        await shutdown_dependencies()
+        shutdown_dependencies()
+        shutdown_dependencies()
 
-        # State should still be uninitialized
+        # State remains uninitialized
+        gen = get_db_dep()
         with pytest.raises(RuntimeError):
-            get_db_dep()
+            await gen.__anext__()
+
+    async def test_repeated_shutdown_after_init_is_idempotent(self) -> None:
+        """GIVEN init_dependencies() was called and then shutdown.
+
+        WHEN shutdown_dependencies() is called again (double shutdown)
+        THEN it does not raise and state remains uninitialized.
+        """
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
+        init_dependencies(mock_db, mock_broadcaster)
+
+        shutdown_dependencies()
+        shutdown_dependencies()  # second call should be safe
+        shutdown_dependencies()  # third call should be safe
+
+        gen = get_db_dep()
+        with pytest.raises(RuntimeError):
+            await gen.__anext__()
+        with pytest.raises(RuntimeError):
+            get_broadcaster_dep()
 
 
 class TestFullLifecycle:
-    """Tests for full init → shutdown → re-init lifecycle."""
+    """Tests for full init -> shutdown -> re-init lifecycle."""
 
     @pytest.fixture(autouse=True)
-    async def cleanup_dependencies(self) -> None:
-        """Cleanup dependencies after each test."""
-        await shutdown_dependencies()
+    def cleanup_dependencies(self) -> Any:
+        """Cleanup dependencies before and after each test."""
+        shutdown_dependencies()
         yield
-        await shutdown_dependencies()
+        shutdown_dependencies()
 
-    async def test_full_lifecycle_init_shutdown_reinit(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN init_dependencies() has been called and then shutdown_dependencies()
-        has been called.
+    async def test_full_lifecycle_creates_new_instances_after_reinit(self) -> None:
+        """GIVEN init -> use -> shutdown has completed.
 
-        WHEN init_dependencies() is called again (simulating a fresh app lifespan cycle)
-        THEN new OrchestratorDB and SSEBroadcaster singletons are created successfully.
+        WHEN init_dependencies() is called again with NEW mock instances
+        THEN the getters return the NEW instances (not the old ones).
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
+        mock_db_1 = MagicMock(name="db_cycle_1")
+        mock_broadcaster_1 = MagicMock(name="broadcaster_cycle_1")
+        init_dependencies(mock_db_1, mock_broadcaster_1)
 
-        # First init
-        await init_dependencies(db_path=str(db_path))
-        db_first = get_db_dep()
+        # Use
+        gen1 = get_db_dep()
+        db_first = await gen1.__anext__()
         broadcaster_first = get_broadcaster_dep()
-        assert db_first is not None
-        assert broadcaster_first is not None
+        assert db_first is mock_db_1
+        assert broadcaster_first is mock_broadcaster_1
 
         # Shutdown
-        await shutdown_dependencies()
+        shutdown_dependencies()
 
-        # Re-init
-        await init_dependencies(db_path=str(db_path))
-        db_second = get_db_dep()
+        # Re-init with new instances
+        mock_db_2 = MagicMock(name="db_cycle_2")
+        mock_broadcaster_2 = MagicMock(name="broadcaster_cycle_2")
+        init_dependencies(mock_db_2, mock_broadcaster_2)
+
+        gen2 = get_db_dep()
+        db_second = await gen2.__anext__()
         broadcaster_second = get_broadcaster_dep()
 
-        # New instances should be created (not the same objects)
-        assert db_second is not None
-        assert broadcaster_second is not None
+        # New instances should be the cycle-2 mocks
+        assert db_second is mock_db_2
+        assert broadcaster_second is mock_broadcaster_2
+        # And NOT the old ones
         assert db_second is not db_first
         assert broadcaster_second is not broadcaster_first
 
-    async def test_multiple_lifecycle_cycles(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN multiple init/shutdown cycles.
+    async def test_multiple_lifecycle_cycles(self) -> None:
+        """GIVEN three successive init/shutdown cycles.
 
-        WHEN each cycle completes
-        THEN each cycle creates new singletons and shutdown properly resets state.
+        WHEN each cycle uses fresh mock instances
+        THEN each cycle's getters return that cycle's instances
+        AND shutdown properly resets state between cycles.
         """
-        db_path = tmp_path / "test.db"  # type: ignore[operator]
-        previous_db = None
-        previous_broadcaster = None
+        previous_db: object | None = None
+        previous_broadcaster: object | None = None
 
         for cycle in range(3):
-            # Init
-            await init_dependencies(db_path=str(db_path))
-            current_db = get_db_dep()
+            mock_db = MagicMock(name=f"db_cycle_{cycle}")
+            mock_broadcaster = MagicMock(name=f"broadcaster_cycle_{cycle}")
+
+            init_dependencies(mock_db, mock_broadcaster)
+
+            gen = get_db_dep()
+            current_db = await gen.__anext__()
             current_broadcaster = get_broadcaster_dep()
 
-            assert current_db is not None
-            assert current_broadcaster is not None
+            assert current_db is mock_db
+            assert current_broadcaster is mock_broadcaster
 
-            # Each cycle should create new instances
+            # Each cycle should have distinct instances from prior cycle
             if previous_db is not None:
                 assert current_db is not previous_db
             if previous_broadcaster is not None:
@@ -344,54 +347,38 @@ class TestFullLifecycle:
             previous_db = current_db
             previous_broadcaster = current_broadcaster
 
-            # Shutdown
-            await shutdown_dependencies()
+            shutdown_dependencies()
 
             # Verify shutdown worked
+            gen_after = get_db_dep()
             with pytest.raises(RuntimeError):
-                get_db_dep()
+                await gen_after.__anext__()
+            with pytest.raises(RuntimeError):
+                get_broadcaster_dep()
 
+    async def test_reinit_after_shutdown_restores_functionality(self) -> None:
+        """GIVEN dependencies were initialized then shut down.
 
-class TestEdgeCases:
-    """Edge case tests for dependency management."""
-
-    @pytest.fixture(autouse=True)
-    async def cleanup_dependencies(self) -> None:
-        """Cleanup dependencies after each test."""
-        await shutdown_dependencies()
-        yield
-        await shutdown_dependencies()
-
-    async def test_init_with_empty_string_path(self) -> None:
-        """GIVEN an empty string db_path.
-
-        WHEN init_dependencies() is called
-        THEN it should handle the edge case appropriately (either raise or use default).
+        WHEN init_dependencies() is called again
+        THEN the async generator for db works end-to-end (yields then exhausts).
         """
-        # This tests edge case behavior - implementation may raise or use default
-        try:
-            await init_dependencies(db_path="")
-            # If it doesn't raise, ensure singletons are created
-            db = get_db_dep()
-            assert db is not None
-        except (ValueError, OSError, RuntimeError):
-            # Expected to raise for invalid path
-            pass
+        mock_db = MagicMock()
+        mock_broadcaster = MagicMock()
 
-    async def test_init_with_nonexistent_directory_path(
-        self,
-        tmp_path: pytest.TempPathFactory,
-    ) -> None:
-        """GIVEN a db_path in a non-existent directory.
+        # First cycle
+        init_dependencies(mock_db, mock_broadcaster)
+        shutdown_dependencies()
 
-        WHEN init_dependencies() is called
-        THEN behavior depends on implementation (may create dir or raise).
-        """
-        db_path = tmp_path / "nonexistent" / "subdir" / "test.db"  # type: ignore[operator]
-        try:
-            await init_dependencies(db_path=str(db_path))
-            db = get_db_dep()
-            assert db is not None
-        except (OSError, RuntimeError):
-            # Expected if implementation doesn't create directories
-            pass
+        # Re-init
+        new_db = MagicMock(name="new_db")
+        new_broadcaster = MagicMock(name="new_broadcaster")
+        init_dependencies(new_db, new_broadcaster)
+
+        # Verify async generator works end-to-end
+        gen = get_db_dep()
+        db = await gen.__anext__()
+        assert db is new_db
+
+        # Generator should be exhausted after one yield
+        with pytest.raises(StopAsyncIteration):
+            await gen.__anext__()
