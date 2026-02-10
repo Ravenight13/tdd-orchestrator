@@ -65,6 +65,36 @@ def list_tasks(
     }
 
 
+def get_task_stats() -> dict[str, int]:
+    """Get aggregate task counts by status.
+
+    This is a placeholder function that will be replaced with actual
+    database queries. For now, it returns all zeros.
+
+    Returns:
+        A dictionary with counts for each status and total count.
+    """
+    return {
+        "pending": 0,
+        "running": 0,
+        "passed": 0,
+        "failed": 0,
+        "total": 0,
+    }
+
+
+def get_task_progress() -> dict[str, float]:
+    """Get phase-level completion percentages.
+
+    This is a placeholder function that will be replaced with actual
+    database queries. For now, it returns an empty dictionary.
+
+    Returns:
+        A dictionary mapping phase names to completion percentages.
+    """
+    return {}
+
+
 @router.get("")
 def get_tasks(
     status: TaskStatus | None = Query(None, description="Filter by task status"),
@@ -99,3 +129,25 @@ def get_tasks(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/stats")
+def get_stats() -> dict[str, int]:
+    """Get aggregate task counts by status.
+
+    Returns:
+        Dictionary with counts for each status (pending, running, passed, failed)
+        and total count of all tasks.
+    """
+    return get_task_stats()
+
+
+@router.get("/progress")
+def get_progress() -> dict[str, float]:
+    """Get phase-level completion percentages.
+
+    Returns:
+        Dictionary mapping phase names to completion percentages (0.0 to 100.0).
+        Returns empty dictionary if no tasks exist.
+    """
+    return get_task_progress()
