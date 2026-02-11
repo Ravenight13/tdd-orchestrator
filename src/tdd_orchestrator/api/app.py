@@ -8,9 +8,16 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     pass
+
+
+class HealthResponse(BaseModel):
+    """Response model for health check endpoint."""
+
+    status: str
 
 
 # Global state for broadcaster and callback
@@ -37,11 +44,11 @@ def _create_task_status_callback() -> Callable[[dict[str, Any]], None]:
     return on_task_status_change
 
 
-async def init_dependencies(app: FastAPI) -> None:
+async def init_dependencies(app: FastAPI | None = None) -> None:
     """Initialize application dependencies during startup.
 
     Args:
-        app: The FastAPI application instance.
+        app: The FastAPI application instance (optional).
     """
     global _broadcaster, _registered_callback
 
@@ -214,13 +221,13 @@ def _register_routes(app: FastAPI) -> None:
     """
 
     @app.get("/health")
-    async def health() -> dict[str, str]:
+    async def health() -> HealthResponse:
         """Health check endpoint.
 
         Returns:
-            A dictionary with status "ok".
+            A HealthResponse with status "ok".
         """
-        return {"status": "ok"}
+        return HealthResponse(status="ok")
 
 
 def _configure_cors(app: FastAPI) -> None:
