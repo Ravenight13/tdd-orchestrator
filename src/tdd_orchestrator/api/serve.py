@@ -66,7 +66,8 @@ def run_server(
 
     with _temporary_env_var(_DB_PATH_ENV_VAR, db_path):
         uvicorn.run(
-            "tdd_orchestrator.api.app:app",
+            "tdd_orchestrator.api.app:create_app",
+            factory=True,
             host=host,
             port=port,
             log_level=log_level,

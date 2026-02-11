@@ -42,7 +42,7 @@ class TestSSEBroadcasterBasicDelivery:
                 break  # Only need one event
 
         subscriber = broadcaster.subscribe()
-        collect_task = asyncio.create_task(collect_events(subscriber))  # type: ignore[arg-type]
+        collect_task = asyncio.create_task(collect_events(subscriber))
 
         # Allow subscription to be established
         await asyncio.sleep(0.01)
@@ -80,7 +80,7 @@ class TestSSEBroadcasterBasicDelivery:
                 break
 
         subscriber = broadcaster.subscribe()
-        collect_task = asyncio.create_task(collect_events(subscriber))  # type: ignore[arg-type]
+        collect_task = asyncio.create_task(collect_events(subscriber))
         await asyncio.sleep(0.01)
 
         expected_data = {"task_id": "t1", "status": "passed", "extra_field": "value"}
@@ -113,7 +113,7 @@ class TestCircuitBreakerSSEIntegration:
                     break
 
         subscriber = broadcaster.subscribe()
-        collect_task = asyncio.create_task(collect_events(subscriber))  # type: ignore[arg-type]
+        collect_task = asyncio.create_task(collect_events(subscriber))
         await asyncio.sleep(0.01)
 
         # Wire up circuit breaker to broadcaster
@@ -150,7 +150,7 @@ class TestCircuitBreakerSSEIntegration:
                     break
 
         subscriber = broadcaster.subscribe()
-        collect_task = asyncio.create_task(collect_events(subscriber))  # type: ignore[arg-type]
+        collect_task = asyncio.create_task(collect_events(subscriber))
         await asyncio.sleep(0.01)
 
         circuit_breaker = wire_circuit_breaker_sse(broadcaster)
@@ -191,8 +191,8 @@ class TestSSEFanOutDelivery:
         subscriber1 = broadcaster.subscribe()
         subscriber2 = broadcaster.subscribe()
 
-        task1 = asyncio.create_task(collect_events(subscriber1, received_by_client1))  # type: ignore[arg-type]
-        task2 = asyncio.create_task(collect_events(subscriber2, received_by_client2))  # type: ignore[arg-type]
+        task1 = asyncio.create_task(collect_events(subscriber1, received_by_client1))
+        task2 = asyncio.create_task(collect_events(subscriber2, received_by_client2))
         await asyncio.sleep(0.01)
 
         event = SSEEvent(event="test_event", data='{"message": "hello"}')
@@ -226,7 +226,7 @@ class TestSSEFanOutDelivery:
 
         subscribers = [broadcaster.subscribe() for _ in range(3)]
         tasks = [
-            asyncio.create_task(collect_events(sub, client_results[i]))  # type: ignore[arg-type]
+            asyncio.create_task(collect_events(sub, client_results[i]))
             for i, sub in enumerate(subscribers)
         ]
         await asyncio.sleep(0.01)
@@ -276,7 +276,7 @@ class TestSSEHeartbeat:
 
         try:
             heartbeat_received = await asyncio.wait_for(
-                wait_for_heartbeat(subscriber), timeout=15.0  # type: ignore[arg-type]
+                wait_for_heartbeat(subscriber), timeout=15.0
             )
         except asyncio.TimeoutError:
             pass  # Will check heartbeat_received below
@@ -305,7 +305,7 @@ class TestSSEHeartbeat:
                 connection_closed = True
 
         subscriber = broadcaster.subscribe()
-        monitor_task = asyncio.create_task(monitor_connection(subscriber))  # type: ignore[arg-type]
+        monitor_task = asyncio.create_task(monitor_connection(subscriber))
 
         # Wait for multiple heartbeats
         try:
@@ -346,7 +346,7 @@ class TestSSEFireAndForgetSemantics:
                 break
 
         subscriber = broadcaster.subscribe()
-        collect_task = asyncio.create_task(collect_events(subscriber))  # type: ignore[arg-type]
+        collect_task = asyncio.create_task(collect_events(subscriber))
         await asyncio.sleep(0.01)
 
         # Publish a new event

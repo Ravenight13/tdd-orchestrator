@@ -124,7 +124,15 @@ class SSEBroadcaster:
         # Cast to the more specific type expected by tests
         return self._subscribers  # type: ignore[return-value]
 
-    def subscribe(self, queue: asyncio.Queue[SSEEvent] | None = None) -> _SSESubscription | asyncio.Queue[Any]:
+    @overload
+    def subscribe(self) -> _SSESubscription: ...
+
+    @overload
+    def subscribe(self, queue: asyncio.Queue[SSEEvent]) -> asyncio.Queue[SSEEvent]: ...
+
+    def subscribe(
+        self, queue: asyncio.Queue[SSEEvent] | None = None
+    ) -> _SSESubscription | asyncio.Queue[SSEEvent]:
         """Subscribe a new client with optional queue parameter.
 
         When called without arguments: creates and returns a new async iterator subscription.
@@ -147,7 +155,7 @@ class SSEBroadcaster:
             self._subscribers.add(new_queue)
             return _SSESubscription(new_queue, self)
 
-    async def unsubscribe(self, subscription: _SSESubscription | asyncio.Queue[Any]) -> None:
+    async def unsubscribe(self, subscription: _SSESubscription | asyncio.Queue[SSEEvent]) -> None:
         """Unsubscribe a client by removing their subscription or queue.
 
         Args:

@@ -88,10 +88,10 @@ class TestRunServerDefaults:
             call_kwargs = mock_uvicorn.run.call_args.kwargs
             assert call_kwargs.get("reload") is False, "Default reload should be False"
 
-    def test_run_server_passes_app_import_string_to_uvicorn(self) -> None:
+    def test_run_server_passes_app_factory_string_to_uvicorn(self) -> None:
         """GIVEN run_server is called with no arguments
         WHEN uvicorn.run is mocked
-        THEN it is invoked with the app import string 'tdd_orchestrator.api.app:app'.
+        THEN it is invoked with the factory import string and factory=True.
         """
         from tdd_orchestrator.api.serve import run_server
 
@@ -100,9 +100,12 @@ class TestRunServerDefaults:
 
             mock_uvicorn.run.assert_called_once()
             call_args = mock_uvicorn.run.call_args
-            # First positional argument should be the app import string
-            assert call_args.args[0] == "tdd_orchestrator.api.app:app", (
-                "uvicorn.run should receive the app import string"
+            # First positional argument should be the factory import string
+            assert call_args.args[0] == "tdd_orchestrator.api.app:create_app", (
+                "uvicorn.run should receive the factory import string"
+            )
+            assert call_args.kwargs.get("factory") is True, (
+                "uvicorn.run should receive factory=True"
             )
 
 

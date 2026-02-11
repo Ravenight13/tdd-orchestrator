@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
+from typing import Any, AsyncGenerator, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
-if TYPE_CHECKING:
-    pass
 
 
 class HealthResponse(BaseModel):
@@ -140,16 +137,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Get the module object fresh from sys.modules to see patched attributes
     app_module = sys.modules[__name__]
 
-    # Get the functions via getattr to ensure we get the (possibly patched) versions
+    # Startup - look up init_dependencies at call time to see patches
     init_fn = getattr(app_module, "init_dependencies")
-    shutdown_fn = getattr(app_module, "shutdown_dependencies")
-
-    # Startup
     try:
         await init_fn()
         yield
     finally:
-        # Shutdown - always called even if init fails
+        # Shutdown - look up shutdown_dependencies at call time to see patches
+        # This is done here (not at the start) so patches applied after startup
+        # but before shutdown will be seen
+        shutdown_fn = getattr(app_module, "shutdown_dependencies")
         await shutdown_fn()
 
 
@@ -249,7 +246,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application.
 
     Returns:
-        The configured FastAPI application instance.
+        A configured FastAPI application with lifespan management.
     """
     app = FastAPI(
         title="TDD Orchestrator",
