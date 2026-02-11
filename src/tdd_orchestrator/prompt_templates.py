@@ -148,6 +148,7 @@ RED_PROMPT_TEMPLATE = """You are a test writer. Your ONLY job is to write pytest
 
 {import_convention}
 {sibling_tests_section}
+{conftest_section}
 ## REQUIREMENTS
 1. Write a pytest test class with test methods
 2. Each acceptance criterion should have at least one test
@@ -201,6 +202,7 @@ You MUST create the implementation file at EXACTLY this path:
 {module_exports_section}
 {existing_impl_section}
 {sibling_tests_section}
+{conftest_section}
 {file_structure_constraint}
 
 {import_convention}
@@ -246,7 +248,10 @@ Review the test output above. Common issues include:
 - Logic errors in the implementation
 - Edge cases not handled
 {test_contract_section}
+{module_exports_section}
+{existing_impl_section}
 {sibling_tests_section}
+{conftest_section}
 {import_convention}
 
 ### Your Task
@@ -315,7 +320,12 @@ FIX_PROMPT_TEMPLATE = """You are a code fixer. Fix the identified issues in this
 
 ## ISSUES TO FIX
 {issues_text}
-
+{test_content_section}
+{impl_content_section}
+{criteria_section}
+{module_exports_section}
+{sibling_tests_section}
+{conftest_section}
 ## COMMON FIXES
 
 ### For mypy "missing type annotation" errors:
@@ -363,6 +373,12 @@ RED_FIX_PROMPT_TEMPLATE = """You are a test fixer. Fix the static review issues 
 
 ## TEST FILE TO FIX
 {test_file}
+{goal_section}{criteria_section}
+{conftest_section}
+{sibling_tests_section}
+{existing_api_section}
+## IMPORT PATH
+Use this import path in tests: `{import_hint}`
 
 ## ISSUES TO FIX
 {issues_text}
@@ -433,7 +449,11 @@ REFACTOR_PROMPT_TEMPLATE = """You are a code refactorer. Improve the code qualit
 
 ## ISSUES TO ADDRESS
 {reasons_text}
-
+{impl_content_section}
+{test_content_section}
+{criteria_section}
+{module_exports_section}
+{sibling_tests_section}
 ## REQUIREMENTS
 1. Read the implementation file and understand its structure
 2. Address ONLY the specific issues listed above

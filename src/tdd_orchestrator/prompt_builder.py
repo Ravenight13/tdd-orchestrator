@@ -15,10 +15,26 @@ the LLM to produce predictable, verifiable outputs at each stage.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
+from .prompt_enrichment import (
+    MAX_HINTS_CONTENT,
+    MAX_IMPL_FILE_CONTENT,
+    MAX_ISSUES_OUTPUT,
+    MAX_TEST_FILE_CONTENT,
+    MAX_TEST_OUTPUT,
+    build_code_section,
+    discover_sibling_tests,
+    escape_braces,
+    extract_impl_signatures,
+    parse_criteria,
+    parse_module_exports,
+    read_conftest,
+    read_file_safe,
+    safe_absolute_path,
+    to_import_path,
+)
 from .prompt_templates import (
     FILE_STRUCTURE_CONSTRAINT,
     FIX_PROMPT_TEMPLATE,
@@ -35,12 +51,6 @@ from .prompt_templates import (
 
 if TYPE_CHECKING:
     from .models import Stage
-
-MAX_TEST_FILE_CONTENT = 8000
-MAX_IMPL_FILE_CONTENT = 6000
-MAX_HINTS_CONTENT = 3000
-MAX_SIBLING_FILES = 5
-MAX_SIBLING_HINT_LINES = 10
 
 
 class PromptBuilder:
@@ -62,212 +72,31 @@ class PromptBuilder:
         prompt = PromptBuilder.build(Stage.RED, task)
     """
 
-    @staticmethod
-    def _parse_criteria(acceptance_criteria: str | list[str] | None) -> list[str]:
-        """Parse acceptance criteria from string or list."""
-        if acceptance_criteria is None:
-            return []
-        if isinstance(acceptance_criteria, list):
-            return acceptance_criteria
-        try:
-            parsed = json.loads(acceptance_criteria)
-            return parsed if isinstance(parsed, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-    @staticmethod
-    def _to_import_path(file_path: str) -> str:
-        """Convert a file path to a Python import path, stripping src layout prefix."""
-        import_path = file_path.replace("/", ".").replace(".py", "")
-        if import_path.startswith("src."):
-            import_path = import_path[4:]
-        return import_path
-
-    @staticmethod
-    def _parse_module_exports(module_exports_raw: str | list[str] | None) -> list[str]:
-        """Parse module_exports from string or list."""
-        if module_exports_raw is None:
-            return []
-        if isinstance(module_exports_raw, list):
-            return module_exports_raw
-        try:
-            parsed = json.loads(module_exports_raw)
-            return parsed if isinstance(parsed, list) else []
-        except (json.JSONDecodeError, TypeError):
-            return []
-
-    @staticmethod
-    def _escape_braces(text: str) -> str:
-        """Escape curly braces for safe use in str.format() templates."""
-        return text.replace("{", "{{").replace("}", "}}")
-
-    @staticmethod
-    def _discover_sibling_tests(
-        base_dir: Path | None,
-        test_file: str,
-        stage_hint: Literal["green", "red"] = "green",
-    ) -> str:
-        """Discover sibling test files and extract async contract hints.
-
-        Globs test_*.py in the test file's parent directory, reads each sibling
-        for `await` patterns, and builds a prompt section warning the worker
-        about existing async contracts.
-
-        Args:
-            base_dir: Project root for resolving paths.
-            test_file: The current task's test file (excluded from results).
-            stage_hint: Controls header/description language.
-                ``"green"`` (default) warns about not breaking siblings.
-                ``"red"`` instructs matching existing contracts.
-
-        Returns:
-            Prompt section string (empty string if no siblings found).
-        """
-        if not base_dir or not test_file:
-            return ""
-
-        test_path = base_dir / test_file
-        parent = test_path.parent
-        if not parent.exists():
-            return ""
-
-        siblings = sorted(
-            p for p in parent.glob("test_*.py")
-            if p.name != test_path.name
-        )
-        if not siblings:
-            return ""
-
-        sections: list[str] = []
-        for sib in siblings[:MAX_SIBLING_FILES]:
-            rel = str(sib.relative_to(base_dir))
-            hints: list[str] = []
-            try:
-                lines = sib.read_text(encoding="utf-8").splitlines()
-                for line in lines:
-                    stripped = line.strip()
-                    if "await " in stripped and len(hints) < MAX_SIBLING_HINT_LINES:
-                        hints.append(f"    {stripped}")
-            except OSError:
-                continue
-
-            if hints:
-                hint_block = "\n".join(hints)
-                sections.append(f"- `{rel}` (async contracts):\n{hint_block}")
-            else:
-                sections.append(f"- `{rel}`")
-
-        sibling_list = "\n".join(sections)
-
-        if stage_hint == "red":
-            return (
-                "\n## SIBLING TESTS (MATCH EXISTING CONTRACTS)\n"
-                "Other test files target the SAME implementation module. "
-                "These tests have already established the API contract "
-                "(function signatures, sync/async, parameter names). "
-                "Your tests MUST use the SAME signatures.\n"
-                "If a sibling test uses `await`, your tests MUST also use "
-                "`await` for that function.\n\n"
-                f"{sibling_list}\n"
-            )
-
-        return (
-            "\n## SIBLING TESTS (DO NOT BREAK)\n"
-            "Other test files target the SAME implementation module. "
-            "Your changes MUST NOT break these existing tests.\n"
-            "If a sibling test uses `await`, the method MUST remain `async def`.\n\n"
-            f"{sibling_list}\n"
-        )
-
-    MAX_IMPL_SIGNATURES = 30
-
-    @staticmethod
-    def _extract_impl_signatures(base_dir: Path | None, impl_file: str) -> str:
-        """Extract function/class signatures from an existing implementation file.
-
-        Reads the implementation file and extracts lines starting with ``def ``,
-        ``async def ``, or ``class `` (plus preceding decorator lines).  The
-        result is wrapped in a prompt section that instructs the LLM to match
-        these exact signatures.
-
-        Args:
-            base_dir: Project root for resolving paths.
-            impl_file: Relative path to the implementation file.
-
-        Returns:
-            Formatted prompt section, or empty string if file doesn't exist
-            or contains no signatures.
-        """
-        raw = PromptBuilder._read_file_safe(
-            base_dir, impl_file, MAX_IMPL_FILE_CONTENT, "",
-        )
-        if not raw:
-            return ""
-
-        lines = raw.splitlines()
-        signatures: list[str] = []
-        prev_line = ""
-        for line in lines:
-            stripped = line.strip()
-            if stripped.startswith(("def ", "async def ", "class ")):
-                if prev_line.strip().startswith("@"):
-                    signatures.append(prev_line)
-                signatures.append(line)
-                if len(signatures) >= PromptBuilder.MAX_IMPL_SIGNATURES:
-                    break
-            prev_line = line
-
-        if not signatures:
-            return ""
-
-        sig_block = PromptBuilder._escape_braces("\n".join(signatures))
-        return (
-            "\n## EXISTING API SIGNATURES\n"
-            "The implementation file already exists. Your tests MUST use "
-            "these exact function signatures. Do NOT assume different "
-            "parameter names, types, or sync/async.\n"
-            f"```python\n{sig_block}\n```\n"
-        )
-
-    @staticmethod
-    def _read_file_safe(
-        base_dir: Path | None,
-        relative_path: str,
-        max_chars: int,
-        fallback: str,
-    ) -> str:
-        """Read a file with truncation and fallback."""
-        if not base_dir or not relative_path:
-            return fallback
-        file_path = (base_dir / relative_path).resolve()
-        try:
-            file_path.relative_to(base_dir.resolve())
-        except ValueError:
-            return fallback
-        if not file_path.exists():
-            return fallback
-        try:
-            raw = file_path.read_text(encoding="utf-8")
-            if len(raw) > max_chars:
-                return raw[:max_chars] + "\n# ... (truncated)"
-            return raw
-        except OSError:
-            return fallback
+    # Keep backward-compatible aliases for any external code referencing these
+    _parse_criteria = staticmethod(parse_criteria)
+    _parse_module_exports = staticmethod(parse_module_exports)
+    _to_import_path = staticmethod(to_import_path)
+    _escape_braces = staticmethod(escape_braces)
+    _read_file_safe = staticmethod(read_file_safe)
+    _discover_sibling_tests = staticmethod(discover_sibling_tests)
+    _read_conftest = staticmethod(read_conftest)
+    _extract_impl_signatures = staticmethod(extract_impl_signatures)
 
     @staticmethod
     def red(task: dict[str, Any], base_dir: Path | None = None) -> str:
         """Generate prompt for RED phase (write failing tests)."""
-        criteria = PromptBuilder._parse_criteria(task.get("acceptance_criteria"))
+        criteria = parse_criteria(task.get("acceptance_criteria"))
         criteria_text = (
             "\n".join(f"- {c}" for c in criteria) if criteria else "- No criteria specified"
         )
 
         impl_file = task.get("impl_file", "impl_file.py")
-        import_path = PromptBuilder._to_import_path(impl_file)
+        import_path = to_import_path(impl_file)
         goal = task.get("goal", "")
-        func_name = goal.split()[-1].lower() if goal else "function"
+        words = goal.split()
+        func_name = words[-1].lower() if words else "function"
 
-        module_exports = PromptBuilder._parse_module_exports(task.get("module_exports"))
+        module_exports = parse_module_exports(task.get("module_exports"))
         if module_exports:
             export_names = ", ".join(module_exports)
             import_hint = f"from {import_path} import {export_names}"
@@ -276,56 +105,63 @@ class PromptBuilder:
 
         module_exports_section = ""
         if module_exports:
+            escaped_exports = [escape_braces(e) for e in module_exports]
             module_exports_section = (
                 f"\n## MODULE EXPORTS (from spec)\n"
                 f"The implementation file will export the following. "
                 f"Write tests that import exactly these:\n"
-                f"- Exports: {', '.join(module_exports)}\n"
-                f"- Import: `{import_hint}`\n\n"
+                f"- Exports: {', '.join(escaped_exports)}\n"
+                f"- Import: `{escape_braces(import_hint)}`\n\n"
                 f"Do NOT import from submodules. Do NOT invent new export names.\n"
             )
 
         test_file = task.get("test_file", "test_file.py")
-        test_file_abs = str(base_dir / test_file) if base_dir else test_file
+        test_file_abs = safe_absolute_path(base_dir, test_file)
 
-        sibling_tests_section = PromptBuilder._discover_sibling_tests(
+        sibling_tests_section = discover_sibling_tests(
             base_dir, test_file, stage_hint="red",
         )
-        existing_api_section = PromptBuilder._extract_impl_signatures(base_dir, impl_file)
+        existing_api_section = extract_impl_signatures(base_dir, impl_file)
+        conftest_section = read_conftest(base_dir, test_file)
 
         return RED_PROMPT_TEMPLATE.format(
-            goal=task.get("goal", "No goal specified"),
-            criteria_text=criteria_text,
+            goal=escape_braces(task.get("goal", "No goal specified")),
+            criteria_text=escape_braces(criteria_text),
             module_exports_section=module_exports_section,
             existing_api_section=existing_api_section,
             sibling_tests_section=sibling_tests_section,
-            test_file=test_file,
-            impl_file=impl_file,
-            import_hint=import_hint,
+            conftest_section=conftest_section,
+            test_file=escape_braces(test_file),
+            impl_file=escape_braces(impl_file),
+            import_hint=escape_braces(import_hint),
             import_convention=IMPORT_CONVENTION,
             static_review_instructions=STATIC_REVIEW_INSTRUCTIONS,
-            test_file_abs=test_file_abs,
+            test_file_abs=escape_braces(test_file_abs),
         )
 
     @staticmethod
     def green(task: dict[str, Any], test_output: str, base_dir: Path | None = None) -> str:
         """Generate prompt for GREEN phase (write implementation)."""
-        truncated_output = test_output[:3000] if test_output else "No test output available"
+        truncated_output = test_output[:MAX_TEST_OUTPUT] if test_output else "No test output available"
 
-        module_exports = PromptBuilder._parse_module_exports(task.get("module_exports"))
+        module_exports = parse_module_exports(task.get("module_exports"))
         impl_file = task.get("impl_file", "impl_file.py")
-        import_path = PromptBuilder._to_import_path(impl_file)
+        import_path = to_import_path(impl_file)
 
         module_exports_section = ""
         if module_exports:
-            exports_list = "\n".join(f"- {e}" for e in module_exports)
+            escaped_exports = [escape_braces(e) for e in module_exports]
+            exports_list = "\n".join(f"- {e}" for e in escaped_exports)
+            escaped_import = escape_braces(
+                f"from {import_path} import {', '.join(module_exports)}"
+            )
             module_exports_section = (
                 f"\n## REQUIRED MODULE EXPORTS\n"
                 f"Your implementation MUST export the following at module level:\n"
                 f"{exports_list}\n\n"
                 f"These must be importable via:\n"
                 f"```python\n"
-                f"from {import_path} import {', '.join(module_exports)}\n"
+                f"{escaped_import}\n"
                 f"```\n\n"
                 f"## CONSTRAINTS\n"
                 f"- Do NOT create a package directory (no __init__.py)\n"
@@ -334,15 +170,15 @@ class PromptBuilder:
                 f"- If multiple classes, define them all in the single file\n"
             )
 
-        impl_file_abs = str(base_dir / impl_file) if base_dir else impl_file
+        impl_file_abs = safe_absolute_path(base_dir, impl_file)
 
         # --- Build test contract section ---
         test_file = task.get("test_file", "test_file.py")
-        raw_test = PromptBuilder._read_file_safe(
+        raw_test = read_file_safe(
             base_dir, test_file, MAX_TEST_FILE_CONTENT,
             "# (test file not available -- use test failures below)",
         )
-        escaped_test = PromptBuilder._escape_braces(raw_test)
+        escaped_test = escape_braces(raw_test)
 
         test_contract_section = (
             "\n## TEST SOURCE CODE (the contract your implementation MUST satisfy)\n"
@@ -354,12 +190,12 @@ class PromptBuilder:
             "- Accept the exact parameter signatures used in test calls\n"
         )
 
-        criteria = PromptBuilder._parse_criteria(task.get("acceptance_criteria"))
+        criteria = parse_criteria(task.get("acceptance_criteria"))
         if criteria:
             criteria_lines = "\n".join(f"- {c}" for c in criteria)
             test_contract_section += (
                 f"\n## ACCEPTANCE CRITERIA\n"
-                f"{PromptBuilder._escape_braces(criteria_lines)}\n"
+                f"{escape_braces(criteria_lines)}\n"
             )
 
         hints_raw = task.get("implementation_hints") or ""
@@ -367,34 +203,30 @@ class PromptBuilder:
             hints_text = hints_raw[:MAX_HINTS_CONTENT]
             test_contract_section += (
                 f"\n## IMPLEMENTATION HINTS\n"
-                f"{PromptBuilder._escape_braces(hints_text)}\n"
+                f"{escape_braces(hints_text)}\n"
             )
 
         # --- Build existing impl section ---
-        existing_impl_section = ""
-        raw_impl = PromptBuilder._read_file_safe(
-            base_dir, impl_file, MAX_IMPL_FILE_CONTENT, "",
+        existing_impl_section = build_code_section(
+            base_dir, impl_file, MAX_IMPL_FILE_CONTENT,
+            "EXISTING IMPLEMENTATION (from prior task)",
+            "This file already exists. PRESERVE all existing classes, methods, "
+            "and exports while adding new functionality required by the tests.",
         )
-        if raw_impl:
-            escaped_impl = PromptBuilder._escape_braces(raw_impl)
-            existing_impl_section = (
-                "\n## EXISTING IMPLEMENTATION (from prior task)\n"
-                "This file already exists. PRESERVE all existing classes, methods, "
-                "and exports while adding new functionality required by the tests.\n"
-                f"```python\n{escaped_impl}\n```\n"
-            )
 
-        sibling_tests_section = PromptBuilder._discover_sibling_tests(base_dir, test_file)
+        sibling_tests_section = discover_sibling_tests(base_dir, test_file)
+        conftest_section = read_conftest(base_dir, test_file)
 
         return GREEN_PROMPT_TEMPLATE.format(
-            goal=task.get("goal", "No goal specified"),
-            test_file=test_file,
-            truncated_output=truncated_output,
-            impl_file=impl_file,
-            impl_file_abs=impl_file_abs,
+            goal=escape_braces(task.get("goal", "No goal specified")),
+            test_file=escape_braces(test_file),
+            truncated_output=escape_braces(truncated_output),
+            impl_file=escape_braces(impl_file),
+            impl_file_abs=escape_braces(impl_file_abs),
             module_exports_section=module_exports_section,
             existing_impl_section=existing_impl_section,
             sibling_tests_section=sibling_tests_section,
+            conftest_section=conftest_section,
             test_contract_section=test_contract_section,
             file_structure_constraint=FILE_STRUCTURE_CONSTRAINT,
             import_convention=IMPORT_CONVENTION,
@@ -411,35 +243,63 @@ class PromptBuilder:
     ) -> str:
         """Build GREEN prompt for retry attempt with failure context."""
         impl_file = task.get("impl_file", "")
-        criteria = PromptBuilder._parse_criteria(task.get("acceptance_criteria", "[]"))
+        criteria = parse_criteria(task.get("acceptance_criteria", "[]"))
         criteria_text = "\n".join(f"- {c}" for c in criteria) if criteria else "- See test file"
 
-        truncated_failure = previous_failure[:3000] if previous_failure else "No output captured"
-        truncated_test_output = test_output[:3000] if test_output else "No test output"
+        truncated_failure = previous_failure[:MAX_TEST_OUTPUT] if previous_failure else "No output captured"
+        truncated_test_output = test_output[:MAX_TEST_OUTPUT] if test_output else "No test output"
 
         # Build test contract section for retry
         test_file = task.get("test_file", "test_file.py")
-        raw_test = PromptBuilder._read_file_safe(
+        raw_test = read_file_safe(
             base_dir, test_file, MAX_TEST_FILE_CONTENT,
             "# (test file not available)",
         )
-        escaped_test = PromptBuilder._escape_braces(raw_test)
+        escaped_test = escape_braces(raw_test)
         test_contract_section = (
             "\n### Test File Content (the contract)\n"
             f"```python\n{escaped_test}\n```\n"
         )
 
-        sibling_tests_section = PromptBuilder._discover_sibling_tests(base_dir, test_file)
+        # Module exports
+        module_exports = parse_module_exports(task.get("module_exports"))
+        import_path = to_import_path(impl_file)
+        module_exports_section = ""
+        if module_exports:
+            escaped_exports = [escape_braces(e) for e in module_exports]
+            exports_list = "\n".join(f"- {e}" for e in escaped_exports)
+            escaped_import = escape_braces(
+                f"from {import_path} import {', '.join(module_exports)}"
+            )
+            module_exports_section = (
+                f"\n## REQUIRED MODULE EXPORTS\n"
+                f"Your implementation MUST export the following at module level:\n"
+                f"{exports_list}\n\n"
+                f"Import: `{escaped_import}`\n"
+            )
+
+        # Existing implementation
+        existing_impl_section = build_code_section(
+            base_dir, impl_file, MAX_IMPL_FILE_CONTENT,
+            "EXISTING IMPLEMENTATION",
+            "Read this carefully before making changes:",
+        )
+
+        sibling_tests_section = discover_sibling_tests(base_dir, test_file)
+        conftest_section = read_conftest(base_dir, test_file)
 
         return GREEN_RETRY_TEMPLATE.format(
             attempt=attempt,
             prev_attempt=attempt - 1,
-            truncated_failure=truncated_failure,
-            impl_file=impl_file,
-            criteria_text=criteria_text,
-            truncated_test_output=truncated_test_output,
+            truncated_failure=escape_braces(truncated_failure),
+            impl_file=escape_braces(impl_file),
+            criteria_text=escape_braces(criteria_text),
+            truncated_test_output=escape_braces(truncated_test_output),
             test_contract_section=test_contract_section,
+            module_exports_section=module_exports_section,
+            existing_impl_section=existing_impl_section,
             sibling_tests_section=sibling_tests_section,
+            conftest_section=conftest_section,
             import_convention=IMPORT_CONVENTION,
         )
 
@@ -447,20 +307,24 @@ class PromptBuilder:
     def verify(task: dict[str, Any]) -> str:
         """Generate prompt for VERIFY phase (run quality checks)."""
         return VERIFY_PROMPT_TEMPLATE.format(
-            title=task.get("title", "Unknown task"),
-            task_key=task.get("task_key", "UNKNOWN"),
-            test_file=task.get("test_file", "test_file.py"),
-            impl_file=task.get("impl_file", "impl_file.py"),
+            title=escape_braces(task.get("title", "Unknown task")),
+            task_key=escape_braces(task.get("task_key", "UNKNOWN")),
+            test_file=escape_braces(task.get("test_file", "test_file.py")),
+            impl_file=escape_braces(task.get("impl_file", "impl_file.py")),
         )
 
     @staticmethod
-    def fix(task: dict[str, Any], issues: list[dict[str, Any]]) -> str:
+    def fix(
+        task: dict[str, Any],
+        issues: list[dict[str, Any]],
+        base_dir: Path | None = None,
+    ) -> str:
         """Generate prompt for FIX phase (address issues)."""
         issues_parts = []
         for i in issues:
             if "tool" in i and "output" in i:
                 tool = i["tool"].upper()
-                output = i["output"][:1000]
+                output = i["output"][:MAX_ISSUES_OUTPUT]
                 issues_parts.append(f"### {tool} ERRORS:\n```\n{output}\n```")
             else:
                 severity = i.get("severity", "unknown").upper()
@@ -470,14 +334,63 @@ class PromptBuilder:
 
         issues_text = "\n\n".join(issues_parts) if issues_parts else "- No issues specified"
 
+        impl_file = task.get("impl_file", "impl_file.py")
+        test_file = task.get("test_file", "test_file.py")
+
+        # Read test file content
+        test_content_section = build_code_section(
+            base_dir, test_file, MAX_TEST_FILE_CONTENT,
+            "TEST CONTRACT",
+            "These are the tests your implementation must satisfy:",
+        )
+
+        # Read impl file content
+        impl_content_section = build_code_section(
+            base_dir, impl_file, MAX_IMPL_FILE_CONTENT,
+            "CURRENT IMPLEMENTATION",
+        )
+
+        # Acceptance criteria
+        criteria_section = ""
+        criteria = parse_criteria(task.get("acceptance_criteria"))
+        if criteria:
+            criteria_lines = "\n".join(f"- {c}" for c in criteria)
+            criteria_section = f"\n## ACCEPTANCE CRITERIA\n{escape_braces(criteria_lines)}\n"
+
+        # Module exports
+        module_exports_section = ""
+        module_exports = parse_module_exports(task.get("module_exports"))
+        if module_exports:
+            exports_list = ", ".join(escape_braces(e) for e in module_exports)
+            module_exports_section = (
+                f"\n## MODULE EXPORTS\n"
+                f"The implementation must export: {exports_list}\n"
+            )
+
+        # Sibling tests
+        sibling_tests_section = discover_sibling_tests(base_dir, test_file)
+
+        # Conftest
+        conftest_section = read_conftest(base_dir, test_file)
+
         return FIX_PROMPT_TEMPLATE.format(
-            goal=task.get("goal", "No goal specified"),
-            impl_file=task.get("impl_file", "impl_file.py"),
-            issues_text=issues_text,
+            goal=escape_braces(task.get("goal", "No goal specified")),
+            impl_file=escape_braces(impl_file),
+            issues_text=escape_braces(issues_text),
+            test_content_section=test_content_section,
+            impl_content_section=impl_content_section,
+            criteria_section=criteria_section,
+            module_exports_section=module_exports_section,
+            sibling_tests_section=sibling_tests_section,
+            conftest_section=conftest_section,
         )
 
     @staticmethod
-    def red_fix(task: dict[str, Any], issues: list[dict[str, Any]]) -> str:
+    def red_fix(
+        task: dict[str, Any],
+        issues: list[dict[str, Any]],
+        base_dir: Path | None = None,
+    ) -> str:
         """Generate prompt for RED_FIX phase (fix static review issues in tests)."""
         issues_text = "\n".join(
             f"- [{i.get('severity', 'error').upper()}] Line {i.get('line_number', '?')}: "
@@ -486,23 +399,101 @@ class PromptBuilder:
             for i in issues
         )
 
+        goal = task.get("goal", "")
+        goal_section = f"\n## TASK GOAL\n{escape_braces(goal)}\n" if goal else ""
+
+        criteria = parse_criteria(task.get("acceptance_criteria"))
+        criteria_section = ""
+        if criteria:
+            criteria_lines = "\n".join(f"- {c}" for c in criteria)
+            criteria_section = f"\n## ACCEPTANCE CRITERIA\n{escape_braces(criteria_lines)}\n"
+
+        impl_file = task.get("impl_file", "impl_file.py")
+        import_hint = to_import_path(impl_file)
+
+        # Enrichments requiring base_dir
+        conftest_section = read_conftest(base_dir, task.get("test_file", ""))
+        sibling_tests_section = discover_sibling_tests(
+            base_dir, task.get("test_file", ""), stage_hint="red",
+        )
+        existing_api_section = extract_impl_signatures(base_dir, impl_file)
+
         return RED_FIX_PROMPT_TEMPLATE.format(
-            task_key=task.get("task_key", "UNKNOWN"),
-            test_file=task.get("test_file", "test_file.py"),
-            issues_text=issues_text,
+            task_key=escape_braces(task.get("task_key", "UNKNOWN")),
+            test_file=escape_braces(task.get("test_file", "test_file.py")),
+            issues_text=escape_braces(issues_text),
+            goal_section=goal_section,
+            criteria_section=criteria_section,
+            import_hint=escape_braces(import_hint),
+            conftest_section=conftest_section,
+            sibling_tests_section=sibling_tests_section,
+            existing_api_section=existing_api_section,
         )
 
     @staticmethod
-    def refactor(task: dict[str, Any], refactor_reasons: list[str]) -> str:
+    def refactor(
+        task: dict[str, Any],
+        refactor_reasons: list[str],
+        base_dir: Path | None = None,
+    ) -> str:
         """Generate prompt for REFACTOR phase (code quality cleanup)."""
-        reasons_text = "\n".join(f"- {r}" for r in refactor_reasons) if refactor_reasons else "- No specific issues identified"
+        reasons_text = (
+            "\n".join(f"- {r}" for r in refactor_reasons)
+            if refactor_reasons
+            else "- No specific issues identified"
+        )
+
+        impl_file = task.get("impl_file", "impl_file.py")
+        test_file = task.get("test_file", "test_file.py")
+
+        # Read current implementation
+        impl_content_section = build_code_section(
+            base_dir, impl_file, MAX_IMPL_FILE_CONTENT,
+            "CURRENT IMPLEMENTATION",
+        )
+
+        # Read test content
+        test_content_section = build_code_section(
+            base_dir, test_file, MAX_TEST_FILE_CONTENT,
+            "TEST CONTRACT",
+            "These tests must continue to pass after refactoring:",
+        )
+
+        # Acceptance criteria
+        criteria_section = ""
+        criteria = parse_criteria(task.get("acceptance_criteria"))
+        if criteria:
+            criteria_lines = "\n".join(f"- {c}" for c in criteria)
+            criteria_section = f"\n## ACCEPTANCE CRITERIA\n{escape_braces(criteria_lines)}\n"
+
+        # Module exports
+        module_exports_section = ""
+        module_exports = parse_module_exports(task.get("module_exports"))
+        if module_exports:
+            exports_list = ", ".join(escape_braces(e) for e in module_exports)
+            module_exports_section = (
+                f"\n## MODULE EXPORTS (must be preserved)\n"
+                f"The implementation must continue to export: {exports_list}\n"
+            )
+
+        # Discover sibling tests
+        sibling_tests_section = discover_sibling_tests(base_dir, test_file)
+        if sibling_tests_section:
+            sibling_tests_section += (
+                "\nRefactoring must not change behavior observed by these tests.\n"
+            )
 
         return REFACTOR_PROMPT_TEMPLATE.format(
-            title=task.get("title", "Unknown task"),
-            task_key=task.get("task_key", "UNKNOWN"),
-            impl_file=task.get("impl_file", "impl_file.py"),
-            test_file=task.get("test_file", "test_file.py"),
-            reasons_text=reasons_text,
+            title=escape_braces(task.get("title", "Unknown task")),
+            task_key=escape_braces(task.get("task_key", "UNKNOWN")),
+            impl_file=escape_braces(impl_file),
+            test_file=escape_braces(test_file),
+            reasons_text=escape_braces(reasons_text),
+            impl_content_section=impl_content_section,
+            test_content_section=test_content_section,
+            criteria_section=criteria_section,
+            module_exports_section=module_exports_section,
+            sibling_tests_section=sibling_tests_section,
         )
 
     @staticmethod
@@ -537,21 +528,21 @@ class PromptBuilder:
             if issues is None:
                 msg = "FIX stage requires 'issues' argument"
                 raise ValueError(msg)
-            return PromptBuilder.fix(task, issues)
+            return PromptBuilder.fix(task, issues, base_dir=base_dir)
 
         if stage == StageEnum.REFACTOR:
             refactor_reasons = kwargs.get("refactor_reasons")
             if refactor_reasons is None:
                 msg = "REFACTOR stage requires 'refactor_reasons' argument"
                 raise ValueError(msg)
-            return PromptBuilder.refactor(task, refactor_reasons)
+            return PromptBuilder.refactor(task, refactor_reasons, base_dir=base_dir)
 
         if stage == StageEnum.RED_FIX:
             issues = kwargs.get("issues")
             if issues is None:
                 msg = "RED_FIX stage requires 'issues' argument"
                 raise ValueError(msg)
-            return PromptBuilder.red_fix(task, issues)
+            return PromptBuilder.red_fix(task, issues, base_dir=base_dir)
 
         msg = f"Unsupported stage: {stage}"
         raise ValueError(msg)

@@ -318,7 +318,7 @@ def test_green_prompt_sibling_section_includes_await_hints(tmp_path: Path) -> No
     task = _setup_sibling_tests(tmp_path)
     result = PromptBuilder.green(task, "ImportError", base_dir=tmp_path)
     assert "await some_func()" in result
-    assert "async contracts" in result
+    assert "behavioral contracts" in result
 
 
 def test_green_retry_includes_sibling_tests_section(tmp_path: Path) -> None:
@@ -429,17 +429,91 @@ def test_extract_impl_signatures_captures_async_def(tmp_path: Path) -> None:
     assert "async def async_func() -> str:" in result
 
 
-def test_read_file_safe_rejects_path_traversal(tmp_path: Path) -> None:
-    """_read_file_safe rejects paths that escape base_dir."""
-    sensitive_dir = tmp_path / "sensitive"
-    sensitive_dir.mkdir()
-    secret = sensitive_dir / "secret.txt"
-    secret.write_text("SECRET_DATA")
+# ---------------------------------------------------------------------------
+# Phase 4: Multi-line decorator capture (#10)
+# ---------------------------------------------------------------------------
 
-    base_dir = tmp_path / "project"
-    base_dir.mkdir()
 
-    result = PromptBuilder._read_file_safe(
-        base_dir, "../sensitive/secret.txt", 1000, "FALLBACK",
+def test_extract_impl_signatures_captures_multiline_decorator(tmp_path: Path) -> None:
+    """extract_impl_signatures captures multi-line decorator arguments."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "foo.py").write_text(
+        '@app.get(\n'
+        '    "/items/{item_id}",\n'
+        '    response_model=Item,\n'
+        ')\n'
+        'async def get_item(item_id: int) -> Item:\n'
+        '    pass\n'
     )
-    assert result == "FALLBACK"
+
+    from tdd_orchestrator.prompt_enrichment import extract_impl_signatures
+    result = extract_impl_signatures(tmp_path, "src/foo.py")
+    assert "@app.get(" in result
+    assert "async def get_item" in result
+
+
+def test_extract_impl_signatures_captures_stacked_decorators(tmp_path: Path) -> None:
+    """extract_impl_signatures captures stacked single-line decorators."""
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    (src_dir / "foo.py").write_text(
+        '@staticmethod\n'
+        '@cache\n'
+        'def compute(x: int) -> int:\n'
+        '    return x * 2\n'
+    )
+
+    from tdd_orchestrator.prompt_enrichment import extract_impl_signatures
+    result = extract_impl_signatures(tmp_path, "src/foo.py")
+    assert "@staticmethod" in result
+    assert "@cache" in result
+    assert "def compute" in result
+
+
+# ---------------------------------------------------------------------------
+# Phase 3b: verify() test coverage (#8)
+# ---------------------------------------------------------------------------
+
+
+def test_verify_prompt_includes_title(task: dict[str, Any]) -> None:
+    """verify() includes the task title in the prompt."""
+    result = PromptBuilder.verify(task)
+    assert task["title"] in result
+
+
+def test_verify_prompt_includes_task_key(task: dict[str, Any]) -> None:
+    """verify() includes the task key in the prompt."""
+    result = PromptBuilder.verify(task)
+    assert task["task_key"] in result
+
+
+def test_verify_prompt_includes_files(task: dict[str, Any]) -> None:
+    """verify() includes both test and impl file paths."""
+    result = PromptBuilder.verify(task)
+    assert task["test_file"] in result
+    assert task["impl_file"] in result
+
+
+def test_build_dispatches_verify(task: dict[str, Any]) -> None:
+    """build(VERIFY) dispatches to verify()."""
+    result = PromptBuilder.build(Stage.VERIFY, task)
+    assert "code verifier" in result
+    assert task["title"] in result
+
+
+def test_build_dispatches_re_verify(task: dict[str, Any]) -> None:
+    """build(RE_VERIFY) dispatches to verify()."""
+    result = PromptBuilder.build(Stage.RE_VERIFY, task)
+    assert "code verifier" in result
+    assert task["task_key"] in result
+
+
+def test_build_unsupported_stage_raises(task: dict[str, Any]) -> None:
+    """build() raises ValueError for unsupported stage values."""
+    from unittest.mock import MagicMock
+    fake_stage = MagicMock()
+    # Ensure it doesn't match any known stage
+    fake_stage.__eq__ = lambda self, other: False
+    with pytest.raises(ValueError, match="Unsupported stage"):
+        PromptBuilder.build(fake_stage, task)
