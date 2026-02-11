@@ -319,7 +319,7 @@ class TestDatabaseNotInitializedStartupError:
         """
         from tdd_orchestrator.api.app import create_app
 
-        async def failing_init(app: Any) -> None:
+        async def failing_init() -> None:
             raise RuntimeError("Database not initialized")
 
         with patch(
@@ -341,7 +341,7 @@ class TestDatabaseNotInitializedStartupError:
         """
         from tdd_orchestrator.api.app import create_app
 
-        async def failing_init(app: Any) -> None:
+        async def failing_init() -> None:
             raise RuntimeError("get_db returned None")
 
         with patch(
@@ -371,7 +371,7 @@ class TestDatabaseNotInitializedStartupError:
         """
         from tdd_orchestrator.api.app import create_app
 
-        async def failing_init(app: Any) -> None:
+        async def failing_init() -> None:
             raise RuntimeError("Failed to initialize database: connection refused")
 
         with patch(

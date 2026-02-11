@@ -6,14 +6,10 @@ wired into the FastAPI app's lifespan context manager.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
-if TYPE_CHECKING:
-    from fastapi import FastAPI
 
 
 class TestCreateAppLifespan:
@@ -73,9 +69,9 @@ class TestLifespanStartup:
             mock_init.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_singletons_available_in_app_state_after_startup(self) -> None:
+    async def test_init_dependencies_called_with_no_args(self) -> None:
         """GIVEN create_app() is called WHEN the app has started
-        THEN singletons (db, redis, etc.) are available in app.state.
+        THEN init_dependencies is called with no arguments.
         """
         from tdd_orchestrator.api.app import create_app
 
@@ -97,12 +93,8 @@ class TestLifespanStartup:
                 # init_dependencies should have been called with the app
                 await client.get("/health")
 
-            # Verify init was called with an app argument that allows setting state
-            mock_init.assert_awaited_once()
-            call_args = mock_init.call_args
-            assert call_args is not None
-            # The app should be passed to init_dependencies
-            assert len(call_args.args) >= 1 or "app" in call_args.kwargs
+            # Verify init was called with no arguments (lifespan calls init_fn())
+            mock_init.assert_awaited_once_with()
 
 
 class TestLifespanShutdown:
@@ -137,10 +129,10 @@ class TestLifespanShutdown:
             mock_shutdown.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_shutdown_dependencies_receives_app_for_cleanup(self) -> None:
+    async def test_shutdown_dependencies_called_with_no_args(self) -> None:
         """GIVEN the app is shutting down
         WHEN shutdown_dependencies is called
-        THEN it receives the app instance for proper cleanup.
+        THEN it is called with no arguments.
         """
         from tdd_orchestrator.api.app import create_app
 
@@ -161,11 +153,8 @@ class TestLifespanShutdown:
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 await client.get("/health")
 
-            mock_shutdown.assert_awaited_once()
-            call_args = mock_shutdown.call_args
-            assert call_args is not None
-            # The app should be passed to shutdown_dependencies
-            assert len(call_args.args) >= 1 or "app" in call_args.kwargs
+            # Verify shutdown was called with no arguments (lifespan calls shutdown_fn())
+            mock_shutdown.assert_awaited_once_with()
 
 
 class TestLifespanErrorHandling:
