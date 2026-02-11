@@ -6,7 +6,8 @@ with appropriate defaults and forwarded arguments.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import os
+from unittest.mock import patch
 
 import pytest
 
@@ -73,10 +74,24 @@ class TestRunServerDefaults:
                 "Default log_level should be 'info'"
             )
 
-    def test_run_server_passes_create_app_to_uvicorn(self) -> None:
+    def test_run_server_uses_default_reload_false_when_not_specified(self) -> None:
         """GIVEN run_server is called with no arguments
         WHEN uvicorn.run is mocked
-        THEN it is invoked with the create_app application.
+        THEN it is invoked with reload=False.
+        """
+        from tdd_orchestrator.api.serve import run_server
+
+        with patch("tdd_orchestrator.api.serve.uvicorn") as mock_uvicorn:
+            run_server()
+
+            mock_uvicorn.run.assert_called_once()
+            call_kwargs = mock_uvicorn.run.call_args.kwargs
+            assert call_kwargs.get("reload") is False, "Default reload should be False"
+
+    def test_run_server_passes_app_import_string_to_uvicorn(self) -> None:
+        """GIVEN run_server is called with no arguments
+        WHEN uvicorn.run is mocked
+        THEN it is invoked with the app import string 'tdd_orchestrator.api.app:app'.
         """
         from tdd_orchestrator.api.serve import run_server
 
@@ -85,9 +100,9 @@ class TestRunServerDefaults:
 
             mock_uvicorn.run.assert_called_once()
             call_args = mock_uvicorn.run.call_args
-            # First positional argument should be the app
-            assert len(call_args.args) >= 1 or "app" in call_args.kwargs, (
-                "uvicorn.run should receive an app argument"
+            # First positional argument should be the app import string
+            assert call_args.args[0] == "tdd_orchestrator.api.app:app", (
+                "uvicorn.run should receive the app import string"
             )
 
 
@@ -143,14 +158,14 @@ class TestRunServerExplicitArguments:
             )
 
     def test_run_server_forwards_all_explicit_arguments_together(self) -> None:
-        """GIVEN run_server is called with host='0.0.0.0', port=9000, log_level='debug'
+        """GIVEN run_server is called with host='0.0.0.0', port=9000, log_level='debug', reload=True
         WHEN uvicorn.run is mocked
         THEN it is invoked with exactly those overridden values.
         """
         from tdd_orchestrator.api.serve import run_server
 
         with patch("tdd_orchestrator.api.serve.uvicorn") as mock_uvicorn:
-            run_server(host="0.0.0.0", port=9000, log_level="debug")
+            run_server(host="0.0.0.0", port=9000, log_level="debug", reload=True)
 
             mock_uvicorn.run.assert_called_once()
             call_kwargs = mock_uvicorn.run.call_args.kwargs
@@ -162,6 +177,9 @@ class TestRunServerExplicitArguments:
             )
             assert call_kwargs.get("log_level") == "debug", (
                 "Explicit log_level should be forwarded"
+            )
+            assert call_kwargs.get("reload") is True, (
+                "Explicit reload should be forwarded"
             )
 
 
@@ -200,24 +218,220 @@ class TestRunServerKwargsForwarding:
                 "reload=False should be forwarded to uvicorn.run"
             )
 
-    def test_run_server_forwards_arbitrary_uvicorn_kwargs(self) -> None:
-        """GIVEN run_server is called with additional uvicorn kwargs
-        WHEN uvicorn.run is mocked
-        THEN those kwargs are forwarded to uvicorn.run.
+
+class TestRunServerDbPath:
+    """Tests for run_server db_path environment variable handling."""
+
+    def test_run_server_sets_env_var_when_db_path_provided(self) -> None:
+        """GIVEN a db_path argument
+        WHEN run_server(db_path='/tmp/test.db') is called
+        THEN TDD_ORCHESTRATOR_DB_PATH is set to '/tmp/test.db' before uvicorn.run is invoked.
         """
         from tdd_orchestrator.api.serve import run_server
 
         with patch("tdd_orchestrator.api.serve.uvicorn") as mock_uvicorn:
-            run_server(workers=4, timeout_keep_alive=30)
+            captured_env: dict[str, str | None] = {}
 
-            mock_uvicorn.run.assert_called_once()
-            call_kwargs = mock_uvicorn.run.call_args.kwargs
-            assert call_kwargs.get("workers") == 4, (
-                "workers kwarg should be forwarded"
+            def capture_env(*args: object, **kwargs: object) -> None:
+                captured_env["value"] = os.environ.get("TDD_ORCHESTRATOR_DB_PATH")
+
+            mock_uvicorn.run.side_effect = capture_env
+
+            run_server(db_path="/tmp/test.db")
+
+            assert captured_env.get("value") == "/tmp/test.db", (
+                "TDD_ORCHESTRATOR_DB_PATH should be set to the provided db_path"
             )
-            assert call_kwargs.get("timeout_keep_alive") == 30, (
-                "timeout_keep_alive kwarg should be forwarded"
+
+    def test_run_server_restores_env_var_after_successful_call(self) -> None:
+        """GIVEN a db_path argument and no previous env var
+        WHEN run_server completes successfully
+        THEN the env var is cleaned up afterward.
+        """
+        from tdd_orchestrator.api.serve import run_server
+
+        env_var_name = "TDD_ORCHESTRATOR_DB_PATH"
+        original_value = os.environ.pop(env_var_name, None)
+
+        try:
+            with patch("tdd_orchestrator.api.serve.uvicorn"):
+                run_server(db_path="/tmp/test.db")
+
+            after_value = os.environ.get(env_var_name)
+            assert after_value is None, (
+                "TDD_ORCHESTRATOR_DB_PATH should be cleaned up after run_server"
             )
+        finally:
+            if original_value is not None:
+                os.environ[env_var_name] = original_value
+
+    def test_run_server_restores_previous_env_var_value(self) -> None:
+        """GIVEN TDD_ORCHESTRATOR_DB_PATH is already set
+        WHEN run_server(db_path=...) completes
+        THEN the original value is restored.
+        """
+        from tdd_orchestrator.api.serve import run_server
+
+        env_var_name = "TDD_ORCHESTRATOR_DB_PATH"
+        original_value = "/original/path.db"
+
+        os.environ[env_var_name] = original_value
+        try:
+            with patch("tdd_orchestrator.api.serve.uvicorn"):
+                run_server(db_path="/tmp/test.db")
+
+            assert os.environ.get(env_var_name) == original_value, (
+                "Original TDD_ORCHESTRATOR_DB_PATH should be restored"
+            )
+        finally:
+            os.environ.pop(env_var_name, None)
+
+    def test_run_server_restores_env_var_on_exception(self) -> None:
+        """GIVEN a db_path argument
+        WHEN uvicorn.run raises an exception
+        THEN the env var is still restored/cleaned up.
+        """
+        from tdd_orchestrator.api.serve import run_server
+
+        env_var_name = "TDD_ORCHESTRATOR_DB_PATH"
+        original_value = os.environ.pop(env_var_name, None)
+
+        try:
+            with patch("tdd_orchestrator.api.serve.uvicorn") as mock_uvicorn:
+                mock_uvicorn.run.side_effect = OSError("Test error")
+
+                with pytest.raises(OSError):
+                    run_server(db_path="/tmp/test.db")
+
+            after_value = os.environ.get(env_var_name)
+            assert after_value is None, (
+                "TDD_ORCHESTRATOR_DB_PATH should be cleaned up even on exception"
+            )
+        finally:
+            if original_value is not None:
+                os.environ[env_var_name] = original_value
+
+    def test_run_server_without_db_path_does_not_modify_env_var(self) -> None:
+        """GIVEN no db_path argument
+        WHEN run_server() is called
+        THEN TDD_ORCHESTRATOR_DB_PATH is not modified.
+        """
+        from tdd_orchestrator.api.serve import run_server
+
+        env_var_name = "TDD_ORCHESTRATOR_DB_PATH"
+        original = os.environ.pop(env_var_name, None)
+
+        try:
+            with patch("tdd_orchestrator.api.serve.uvicorn") as mock_uvicorn:
+                captured_env: dict[str, str | None] = {}
+
+                def capture_env(*args: object, **kwargs: object) -> None:
+                    captured_env["value"] = os.environ.get(env_var_name)
+
+                mock_uvicorn.run.side_effect = capture_env
+
+                run_server()
+
+                assert captured_env.get("value") is None, (
+                    "TDD_ORCHESTRATOR_DB_PATH should not be set when db_path not provided"
+                )
+        finally:
+            if original is not None:
+                os.environ[env_var_name] = original
+
+
+class TestRunServerUvicornNotInstalled:
+    """Tests for run_server when uvicorn is not installed."""
+
+    def test_run_server_raises_runtime_error_when_uvicorn_not_installed(self) -> None:
+        """GIVEN uvicorn is not installed (ImportError on import)
+        WHEN run_server() is called
+        THEN a RuntimeError is raised with a message indicating uvicorn must be installed.
+        """
+        import sys
+
+        # Save original module references
+        original_uvicorn = sys.modules.get("uvicorn")
+        original_serve = sys.modules.get("tdd_orchestrator.api.serve")
+
+        try:
+            # Remove uvicorn and serve module from cache
+            sys.modules.pop("uvicorn", None)
+            sys.modules.pop("tdd_orchestrator.api.serve", None)
+
+            # Mock the import to raise ImportError for uvicorn
+            original_import = __builtins__["__import__"]
+
+            def mock_import(
+                name: str,
+                globals: dict[str, object] | None = None,
+                locals: dict[str, object] | None = None,
+                fromlist: tuple[str, ...] = (),
+                level: int = 0,
+            ) -> object:
+                if name == "uvicorn":
+                    raise ImportError("No module named 'uvicorn'")
+                return original_import(name, globals, locals, fromlist, level)
+
+            with patch.dict("builtins.__dict__", {"__import__": mock_import}):
+                with pytest.raises(RuntimeError) as exc_info:
+                    from tdd_orchestrator.api.serve import run_server as fresh_run_server
+
+                    fresh_run_server()
+
+                error_msg = str(exc_info.value).lower()
+                assert "uvicorn" in error_msg or "pip install" in error_msg, (
+                    "RuntimeError should mention uvicorn or installation instructions"
+                )
+        finally:
+            # Restore original modules
+            if original_uvicorn is not None:
+                sys.modules["uvicorn"] = original_uvicorn
+            if original_serve is not None:
+                sys.modules["tdd_orchestrator.api.serve"] = original_serve
+
+    def test_run_server_error_message_suggests_api_extra(self) -> None:
+        """GIVEN uvicorn is not installed
+        WHEN run_server() raises RuntimeError
+        THEN the message suggests installing tdd-orchestrator[api].
+        """
+        import sys
+
+        original_uvicorn = sys.modules.get("uvicorn")
+        original_serve = sys.modules.get("tdd_orchestrator.api.serve")
+
+        try:
+            sys.modules.pop("uvicorn", None)
+            sys.modules.pop("tdd_orchestrator.api.serve", None)
+
+            original_import = __builtins__["__import__"]
+
+            def mock_import(
+                name: str,
+                globals: dict[str, object] | None = None,
+                locals: dict[str, object] | None = None,
+                fromlist: tuple[str, ...] = (),
+                level: int = 0,
+            ) -> object:
+                if name == "uvicorn":
+                    raise ImportError("No module named 'uvicorn'")
+                return original_import(name, globals, locals, fromlist, level)
+
+            with patch.dict("builtins.__dict__", {"__import__": mock_import}):
+                with pytest.raises(RuntimeError) as exc_info:
+                    from tdd_orchestrator.api.serve import run_server as fresh_run_server
+
+                    fresh_run_server()
+
+                error_msg = str(exc_info.value)
+                assert "pip install" in error_msg.lower() or "api" in error_msg.lower(), (
+                    "RuntimeError should suggest installation method"
+                )
+        finally:
+            if original_uvicorn is not None:
+                sys.modules["uvicorn"] = original_uvicorn
+            if original_serve is not None:
+                sys.modules["tdd_orchestrator.api.serve"] = original_serve
 
 
 class TestRunServerErrorPropagation:
@@ -256,6 +470,23 @@ class TestRunServerErrorPropagation:
 
             assert exc_info.value is port_error, (
                 "The exact same OSError instance should be raised"
+            )
+
+    def test_run_server_propagates_oserror_with_specific_port(self) -> None:
+        """GIVEN run_server(port=8420) is called and uvicorn.run raises an OSError
+        WHEN the exception propagates
+        THEN the OSError propagates to the caller without being swallowed.
+        """
+        from tdd_orchestrator.api.serve import run_server
+
+        with patch("tdd_orchestrator.api.serve.uvicorn") as mock_uvicorn:
+            mock_uvicorn.run.side_effect = OSError("Address already in use")
+
+            with pytest.raises(OSError) as exc_info:
+                run_server(port=8420)
+
+            assert "Address already in use" in str(exc_info.value), (
+                "OSError should propagate when using specific port"
             )
 
     def test_run_server_does_not_catch_generic_exceptions(self) -> None:
