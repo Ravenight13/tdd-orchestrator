@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,12 +13,38 @@ if TYPE_CHECKING:
     pass
 
 
+# Global state for broadcaster and callback
+_broadcaster: Any = None
+_registered_callback: Callable[[dict[str, Any]], None] | None = None
+
+
+def _create_task_status_callback() -> Callable[[dict[str, Any]], None]:
+    """Create a callback function for task status changes.
+
+    Returns:
+        A callback that publishes events through the broadcaster.
+    """
+
+    def on_task_status_change(event: dict[str, Any]) -> None:
+        """Callback invoked when task status changes."""
+        if _broadcaster is not None:
+            try:
+                _broadcaster.publish(event)
+            except Exception:
+                # Silently catch exceptions to prevent app crashes
+                pass
+
+    return on_task_status_change
+
+
 async def init_dependencies(app: FastAPI) -> None:
     """Initialize application dependencies during startup.
 
     Args:
         app: The FastAPI application instance.
     """
+    global _broadcaster, _registered_callback
+
     # Import the actual init function from dependencies module
     from tdd_orchestrator.api.dependencies import (
         init_dependencies as sync_init_dependencies,
@@ -32,6 +58,19 @@ async def init_dependencies(app: FastAPI) -> None:
     # Call the synchronous init function
     sync_init_dependencies(db_instance, broadcaster_instance)
 
+    # Create SSE broadcaster
+    from tdd_orchestrator.api.sse import SSEBroadcaster
+
+    _broadcaster = SSEBroadcaster()
+
+    # Create and register callback with DB observer
+    _registered_callback = _create_task_status_callback()
+
+    # Register the callback with the DB observer
+    from tdd_orchestrator.db.observer import register_task_callback
+
+    register_task_callback(_registered_callback)
+
 
 async def shutdown_dependencies(app: FastAPI) -> None:
     """Shut down application dependencies during shutdown.
@@ -39,6 +78,37 @@ async def shutdown_dependencies(app: FastAPI) -> None:
     Args:
         app: The FastAPI application instance.
     """
+    import asyncio
+    import inspect
+
+    global _broadcaster, _registered_callback
+
+    # Unregister the callback first
+    if _registered_callback is not None:
+        from tdd_orchestrator.db.observer import unregister_task_callback
+
+        unregister_task_callback(_registered_callback)
+        _registered_callback = None
+
+    # Shutdown the broadcaster
+    if _broadcaster is not None:
+        # Check if broadcaster has a shutdown method
+        if hasattr(_broadcaster, "shutdown"):
+            shutdown_method = _broadcaster.shutdown
+            # Check if it's async or sync
+            if inspect.iscoroutinefunction(shutdown_method) or (
+                hasattr(shutdown_method, "__call__")
+                and asyncio.iscoroutinefunction(shutdown_method)
+            ):
+                await shutdown_method()
+            else:
+                # Try to call it - might be a mock or sync method
+                result = shutdown_method()
+                # If it returns a coroutine, await it
+                if inspect.iscoroutine(result):
+                    await result
+        _broadcaster = None
+
     # Import the actual shutdown function from dependencies module
     from tdd_orchestrator.api.dependencies import (
         shutdown_dependencies as sync_shutdown_dependencies,
