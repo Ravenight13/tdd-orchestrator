@@ -23,7 +23,7 @@ from tdd_orchestrator.api.app import (
 )
 
 if TYPE_CHECKING:
-    from fastapi import FastAPI
+    pass
 
 
 class TestAppLifecycleStartup:
@@ -303,23 +303,21 @@ class TestInitAndShutdownDependenciesDirect:
         """Verify init_dependencies is an async callable."""
         # Should be able to call it without error
         # The actual behavior depends on implementation
-        result = await init_dependencies()
-        # init_dependencies typically returns None
-        assert result is None
+        await init_dependencies()
+        # init_dependencies completes without error
 
     @pytest.mark.asyncio
     async def test_shutdown_dependencies_is_callable(self) -> None:
         """Verify shutdown_dependencies is an async callable."""
         # First init, then shutdown
         await init_dependencies()
-        result = await shutdown_dependencies()
-        # shutdown_dependencies typically returns None
-        assert result is None
+        await shutdown_dependencies()
+        # shutdown_dependencies completes without error
 
     @pytest.mark.asyncio
     async def test_shutdown_dependencies_safe_to_call_without_init(self) -> None:
         """Verify shutdown_dependencies handles case where init was never called."""
         # This should not raise even if called without init
         # (defensive coding for edge cases)
-        result = await shutdown_dependencies()
-        assert result is None
+        await shutdown_dependencies()
+        # shutdown_dependencies completes without error
