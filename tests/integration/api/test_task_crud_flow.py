@@ -7,23 +7,41 @@ list with filters, retrieve details, and retry failed tasks.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from tdd_orchestrator.api.app import create_app
 
-# These exports will be implemented in this module
-from tests.integration.api.test_task_crud_flow import (
-    TaskDetailResponse,
-    TaskFilterParams,
-    TaskListResponse,
-    TaskResponse,
-    TaskRetryRequest,
-)
-
 if TYPE_CHECKING:
+    pass
+
+
+# Type alias classes for documentation purposes
+# These represent the expected API response structures
+class TaskResponse:
+    """Represents a task in list responses."""
+    pass
+
+
+class TaskDetailResponse:
+    """Represents a detailed task response."""
+    pass
+
+
+class TaskListResponse:
+    """Represents a paginated list of tasks."""
+    pass
+
+
+class TaskFilterParams:
+    """Represents query parameters for filtering tasks."""
+    pass
+
+
+class TaskRetryRequest:
+    """Represents a request to retry a failed task."""
     pass
 
 
