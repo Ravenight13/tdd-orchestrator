@@ -5,7 +5,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 if TYPE_CHECKING:
     pass
@@ -74,13 +76,72 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await shutdown_fn(app)
 
 
-def create_app() -> FastAPI:
-    """Create and configure the FastAPI application.
+async def _value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    """Handle ValueError exceptions.
+
+    Args:
+        request: The HTTP request.
+        exc: The ValueError exception.
 
     Returns:
-        The configured FastAPI application instance.
+        JSON response with 422 status code.
     """
-    app = FastAPI(lifespan=lifespan)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": str(exc)},
+    )
+
+
+async def _runtime_error_handler(request: Request, exc: RuntimeError) -> JSONResponse:
+    """Handle RuntimeError exceptions.
+
+    Args:
+        request: The HTTP request.
+        exc: The RuntimeError exception.
+
+    Returns:
+        JSON response with 500 status code.
+    """
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
+async def _general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Handle general exceptions.
+
+    Args:
+        request: The HTTP request.
+        exc: The exception.
+
+    Returns:
+        JSON response with 500 status code.
+    """
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
+def _register_error_handlers(app: FastAPI) -> None:
+    """Register exception handlers on the application.
+
+    Args:
+        app: The FastAPI application instance.
+    """
+    # Note: More specific handlers must be registered before general ones
+    app.add_exception_handler(ValueError, _value_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RuntimeError, _runtime_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(Exception, _general_exception_handler)
+
+
+def _register_routes(app: FastAPI) -> None:
+    """Register application routes.
+
+    Args:
+        app: The FastAPI application instance.
+    """
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -90,5 +151,38 @@ def create_app() -> FastAPI:
             A dictionary with status "ok".
         """
         return {"status": "ok"}
+
+
+def _configure_cors(app: FastAPI) -> None:
+    """Configure CORS middleware on the application.
+
+    Args:
+        app: The FastAPI application instance.
+    """
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    Returns:
+        The configured FastAPI application instance.
+    """
+    app = FastAPI(
+        title="TDD Orchestrator",
+        version="1.0.0",
+        docs_url="/docs",
+        lifespan=lifespan,
+    )
+
+    _configure_cors(app)
+    _register_error_handlers(app)
+    _register_routes(app)
 
     return app
