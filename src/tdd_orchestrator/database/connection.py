@@ -151,6 +151,9 @@ class ConnectionMixin:
         # PLAN9: Check for module_exports column migration
         await self._migrate_module_exports()
 
+        # Overlap detection: Check for task_type column migration
+        await self._migrate_task_type()
+
     async def _migrate_module_exports(self) -> None:
         """Migrate database to add PLAN9 module_exports column if missing.
 
@@ -174,6 +177,28 @@ class ConnectionMixin:
                 )
                 await self._conn.commit()
                 logger.info("PLAN9: module_exports column added successfully")
+
+    async def _migrate_task_type(self) -> None:
+        """Migrate database to add task_type column if missing.
+
+        This method handles schema migration for existing databases that
+        don't have the task_type column. It's idempotent and safe
+        to run multiple times.
+        """
+        if not self._conn:
+            return
+
+        try:
+            await self._conn.execute("SELECT task_type FROM tasks LIMIT 1")
+            logger.debug("task_type column already exists")
+        except Exception:
+            logger.info("Adding task_type column to tasks table")
+            async with self._write_lock:
+                await self._conn.execute(
+                    "ALTER TABLE tasks ADD COLUMN task_type TEXT DEFAULT 'implement'"
+                )
+                await self._conn.commit()
+                logger.info("task_type column added successfully")
 
     # =========================================================================
     # Generic Query/Update Helpers (for testing)

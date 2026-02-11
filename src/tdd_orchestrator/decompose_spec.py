@@ -416,6 +416,14 @@ async def run_decomposition(
     # Only calculate dependencies, don't reassign keys (they're already correct)
     final_tasks = generator._calculate_dependencies(validated_tasks)
 
+    # Post-dependency: Detect impl_file + module_exports overlaps (deterministic)
+    from .decomposition.overlap_detector import detect_overlaps
+
+    final_tasks = detect_overlaps(final_tasks)
+    overlap_count = sum(1 for t in final_tasks if t.task_type == "verify-only")
+    if overlap_count:
+        logger.info("Overlap detection: %d tasks marked as verify-only", overlap_count)
+
     # Step 5.5: Validate against spec
     if parsed_spec.module_structure.get("files") or parsed_spec.module_api:
         validator = SpecConformanceValidator()

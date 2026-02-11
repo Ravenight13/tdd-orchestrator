@@ -247,6 +247,18 @@ class Worker:
         task_key = task.get("task_key", "UNKNOWN")
         test_file = task.get("test_file", "")
 
+        # Check for verify-only tasks (overlap detection marked this task)
+        task_type = task.get("task_type", "implement")
+        if task_type == "verify-only":
+            from .verify_only import run_verify_only_pipeline
+
+            logger.info("[%s] Task type: verify-only -- skipping RED+GREEN", task_key)
+            return await run_verify_only_pipeline(
+                task=task,
+                run_stage=self._run_stage,
+                base_dir=self.base_dir,
+            )
+
         # Resume capability: Check if test file exists from prior run
         test_file_path = Path(test_file) if test_file else None
         skip_red = False
@@ -268,6 +280,16 @@ class Worker:
                 task_key, "RED", f"wip({task_key}): RED stage - failing tests", self.base_dir
             )
 
+        # Check if task is pre-implemented (RED tests passed because impl exists)
+        skip_green = False
+        if result.pre_implemented:
+            logger.info(
+                "[%s] Pre-implemented -- skipping RED review + GREEN, proceeding to VERIFY",
+                task_key,
+            )
+            skip_green = True
+
+        if not skip_red and not skip_green:
             # Post-RED: verify test file exists at expected path, reconcile if needed
             if test_file:
                 actual = await discover_test_file(test_file, self.base_dir)
@@ -332,18 +354,19 @@ class Worker:
 
             logger.info("[%s] Static review passed", task_key)
 
-        # Stage 2: GREEN - Write implementation (WITH RETRY)
-        result = await self._run_green_with_retry(task, test_output=result.output)
-        if not result.success:
-            # Record final failure (individual attempts already logged)
-            await self.db.mark_task_failing(
-                task_key,
-                f"GREEN failed after max attempts. Last error: {result.error}",
+        if not skip_green:
+            # Stage 2: GREEN - Write implementation (WITH RETRY)
+            result = await self._run_green_with_retry(task, test_output=result.output)
+            if not result.success:
+                # Record final failure (individual attempts already logged)
+                await self.db.mark_task_failing(
+                    task_key,
+                    f"GREEN failed after max attempts. Last error: {result.error}",
+                )
+                return False
+            await commit_stage(
+                task_key, "GREEN", f"wip({task_key}): GREEN stage - implementation", self.base_dir
             )
-            return False
-        await commit_stage(
-            task_key, "GREEN", f"wip({task_key}): GREEN stage - implementation", self.base_dir
-        )
 
         # Auto-fix unused imports before VERIFY
         impl_file = task.get("impl_file", "")

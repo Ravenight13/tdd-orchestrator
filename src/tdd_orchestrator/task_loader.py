@@ -165,6 +165,7 @@ async def load_tdd_tasks(
                 phase=task.get("phase", 0),
                 sequence=task.get("sequence", 0),
                 module_exports=task.get("module_exports"),
+                task_type=task.get("task_type", "implement"),
             )
             result["loaded"] += 1
             result["task_keys"].append(task_key)
@@ -277,6 +278,7 @@ async def write_tasks_incremental(
                 phase=task.get("phase", cycle_number),
                 sequence=task.get("sequence", 0),
                 module_exports=task.get("module_exports"),
+                task_type=task.get("task_type", "implement"),
             )
             written += 1
             logger.debug(f"Wrote task {task_key} from cycle {cycle_number}")

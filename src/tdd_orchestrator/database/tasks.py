@@ -220,6 +220,7 @@ class TaskMixin:
         phase: int = 0,
         sequence: int = 0,
         module_exports: list[str] | None = None,
+        task_type: str = "implement",
     ) -> int:
         """Create a new task.
 
@@ -237,6 +238,7 @@ class TaskMixin:
             phase: Phase number for ordering.
             sequence: Sequence within phase.
             module_exports: PLAN9 - List of export names for this module.
+            task_type: Pipeline type ("implement" or "verify-only").
 
         Returns:
             The new task's ID.
@@ -251,8 +253,8 @@ class TaskMixin:
                 INSERT INTO tasks (
                     task_key, title, goal, spec_id, acceptance_criteria,
                     test_file, impl_file, verify_command, done_criteria,
-                    depends_on, phase, sequence, module_exports
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    depends_on, phase, sequence, module_exports, task_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     task_key,
@@ -268,6 +270,7 @@ class TaskMixin:
                     phase,
                     sequence,
                     json.dumps(module_exports) if module_exports else "[]",
+                    task_type,
                 ),
             )
             await self._conn.commit()

@@ -64,19 +64,60 @@ async def verify_stage_result(
             )
 
         passed, output = await verifier.run_pytest(test_file)
-        # RED should FAIL (tests fail because no implementation)
-        success = not passed  # Inverted: pytest failing = RED success
 
-        # Record stage attempt
+        if not passed:
+            # Classic TDD: tests fail as expected -> RED success
+            await db.record_stage_attempt(
+                task_id=task["id"],
+                stage=stage.value,
+                attempt_number=1,
+                success=True,
+                pytest_exit_code=1,
+            )
+            return StageResult(stage=stage, success=True, output=output)
+
+        # Tests passed unexpectedly -- check if impl_file already exists
+        impl_file = task.get("impl_file", "")
+        task_key = task.get("task_key", "UNKNOWN")
+
+        if impl_file and (base_dir / impl_file).exists():
+            # Implementation file exists and tests pass against it.
+            # This task's requirements are already satisfied by a dependency.
+            logger.warning(
+                "[%s] RED tests passed -- impl_file exists (%s), marking pre-implemented",
+                task_key,
+                impl_file,
+            )
+            await db.record_stage_attempt(
+                task_id=task["id"],
+                stage=stage.value,
+                attempt_number=1,
+                success=True,
+                pytest_exit_code=0,
+            )
+            return StageResult(
+                stage=stage, success=True, output=output, pre_implemented=True,
+            )
+
+        # Tests passed but no impl file exists -- genuine RED failure
+        logger.error(
+            "[%s] RED tests passed but no implementation file exists at %s",
+            task_key,
+            impl_file or "(no impl_file specified)",
+        )
         await db.record_stage_attempt(
             task_id=task["id"],
             stage=stage.value,
             attempt_number=1,
-            success=success,
-            pytest_exit_code=0 if passed else 1,
+            success=False,
+            pytest_exit_code=0,
         )
-
-        return StageResult(stage=stage, success=success, output=output)
+        return StageResult(
+            stage=stage,
+            success=False,
+            output=output,
+            error="RED tests passed without implementation -- tests may not be asserting correctly",
+        )
 
     if stage == Stage.GREEN:
         # GREEN succeeds if pytest passes

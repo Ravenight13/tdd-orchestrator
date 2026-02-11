@@ -98,6 +98,7 @@ class DecomposedTask:
     implementation_hints: str = ""  # Markdown hints from Pass 4
     module_exports: list[str] = field(default_factory=list)  # PLAN9: Export names for this module
     import_pattern: str = "direct"  # PLAN9: How to import (direct, namespace, factory)
+    task_type: str = "implement"  # "implement" | "verify-only"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation.
@@ -128,6 +129,7 @@ class DecomposedTask:
             "implementation_hints": self.implementation_hints,
             "module_exports": self.module_exports,
             "import_pattern": self.import_pattern,
+            "task_type": self.task_type,
         }
 
 

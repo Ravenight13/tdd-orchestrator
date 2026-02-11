@@ -64,6 +64,7 @@ class StageResult:
     output: str
     error: str | None = None
     issues: list[dict[str, Any]] | None = None
+    pre_implemented: bool = False
 
 
 @dataclass

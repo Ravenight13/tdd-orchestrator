@@ -80,6 +80,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     -- PLAN9: Module exports for scaffolding reference
     module_exports TEXT DEFAULT '[]',    -- JSON array of export names
 
+    -- Overlap detection: task pipeline type
+    task_type TEXT DEFAULT 'implement'
+        CHECK(task_type IN ('implement', 'verify-only')),
+
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
