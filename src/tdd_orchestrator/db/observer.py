@@ -63,7 +63,8 @@ def dispatch_task_callbacks(event: dict[str, Any]) -> None:
             - new_status: str
             - timestamp: str
     """
-    for callback in _callbacks:
+    # Iterate over a copy to handle callbacks that modify the list during dispatch
+    for callback in _callbacks[:]:
         try:
             callback(event)
         except Exception as e:
