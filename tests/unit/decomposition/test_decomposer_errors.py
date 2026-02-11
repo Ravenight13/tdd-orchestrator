@@ -13,10 +13,8 @@ import pytest
 
 from tdd_orchestrator.decomposition import ParsedSpec
 from tdd_orchestrator.decomposition.config import DecompositionConfig
-from tdd_orchestrator.decomposition.decomposer import (
-    LLMDecompositionError,
-    LLMDecomposer,
-)
+from tdd_orchestrator.decomposition.decomposer import LLMDecomposer
+from tdd_orchestrator.decomposition.task_model import LLMDecompositionError
 from tdd_orchestrator.decomposition.llm_client import (
     LLMClientError,
     LLMResponseParseError,

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 
-from tdd_orchestrator.decomposition.decomposer import DecomposedTask
+from tdd_orchestrator.decomposition.task_model import DecomposedTask
 from tdd_orchestrator.decomposition.overlap_detector import detect_overlaps
 
 

@@ -17,7 +17,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
 
 
 def camel_to_snake(name: str) -> str:

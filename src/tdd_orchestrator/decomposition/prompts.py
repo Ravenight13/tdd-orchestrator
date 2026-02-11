@@ -20,7 +20,7 @@ from .config import DecompositionConfig, DEFAULT_DECOMPOSITION_CONFIG
 from .utils import sanitize_for_llm
 
 if TYPE_CHECKING:
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
 
 # =============================================================================
 # PASS 1: Phase/Cycle Extraction

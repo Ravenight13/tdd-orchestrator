@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from tdd_orchestrator.decomposition.decomposer import DecomposedTask
+from tdd_orchestrator.decomposition.task_model import DecomposedTask
 from tdd_orchestrator.models import Stage
 from tdd_orchestrator.task_loader import load_tdd_tasks
 from tdd_orchestrator.worker_pool import Worker, WorkerConfig

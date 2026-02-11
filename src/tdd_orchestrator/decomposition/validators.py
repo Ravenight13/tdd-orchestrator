@@ -21,7 +21,7 @@ from .llm_client import LLMClient, LLMResponseParseError, parse_json_response
 from .prompts import format_re_decomposition_prompt
 
 if TYPE_CHECKING:
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +268,7 @@ class RecursiveValidator:
             List of 2-3 smaller subtasks.
         """
         # Import here to avoid circular imports
-        from .decomposer import DecomposedTask as TaskClass
+        from .task_model import DecomposedTask as TaskClass
 
         strategy = self._select_split_strategy(task, violations)
 

@@ -16,7 +16,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
 
 logger = logging.getLogger(__name__)
 

@@ -35,9 +35,9 @@ Public API:
 from __future__ import annotations
 
 from .config import DecompositionConfig, DecompositionMetrics
-from .decomposer import (
+from .decomposer import LLMDecomposer
+from .task_model import (
     DecomposedTask,
-    LLMDecomposer,
     LLMDecompositionError,
     OnCycleCompleteCallback,
 )

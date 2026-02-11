@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from tdd_orchestrator.decomposition.decomposer import DecomposedTask
+from tdd_orchestrator.decomposition.task_model import DecomposedTask
 from tdd_orchestrator.decomposition.generator import (
     TaskGenerator,
     camel_to_snake,

@@ -11,7 +11,7 @@ import json
 import pytest
 
 from tdd_orchestrator.decomposition.config import DecompositionConfig
-from tdd_orchestrator.decomposition.decomposer import DecomposedTask
+from tdd_orchestrator.decomposition.task_model import DecomposedTask
 from tdd_orchestrator.decomposition.llm_client import MockLLMClient
 from tdd_orchestrator.decomposition.validators import (
     AtomicityValidator,

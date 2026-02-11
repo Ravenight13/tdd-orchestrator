@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tdd_orchestrator.decomposition.decomposer import DecomposedTask
+from tdd_orchestrator.decomposition.task_model import DecomposedTask
 from tdd_orchestrator.decomposition.streaming_hints import (
     STREAMING_TEST_HINTS,
     detect_streaming_task,

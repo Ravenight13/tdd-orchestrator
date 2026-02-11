@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
     from .parser import ParsedSpec
 
 
@@ -51,7 +51,7 @@ def _generate_dependency_task(
     Returns:
         List with zero or one DecomposedTask.
     """
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
 
     dep = spec.dependency_changes
     if not dep or not dep.get("packages"):
@@ -103,7 +103,7 @@ def _generate_scaffold_task(
     Returns:
         List with zero or one DecomposedTask.
     """
-    from .decomposer import DecomposedTask
+    from .task_model import DecomposedTask
 
     mod = spec.module_structure
     base_path: str = mod.get("base_path", "") if mod else ""
