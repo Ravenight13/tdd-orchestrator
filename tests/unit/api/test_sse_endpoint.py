@@ -2,12 +2,17 @@
 
 Tests the GET /events endpoint that streams SSEEvents from the broadcaster
 using EventSourceResponse.
+
+Key testing pattern: SSE streams are long-lived connections. Every test must
+ensure the stream terminates by putting a None sentinel in the queue.
+Tests that only check headers use client.stream() and exit the context
+immediately. All async tests have explicit timeouts to prevent hangs.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, AsyncGenerator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,35 +22,52 @@ from httpx import ASGITransport, AsyncClient
 from tdd_orchestrator.api.routes.events import router
 
 
+def _make_app() -> FastAPI:
+    """Create a FastAPI app with the events router mounted."""
+    app = FastAPI()
+    app.include_router(router)
+    return app
+
+
+def _make_broadcaster(
+    queue: asyncio.Queue[Any] | None = None,
+) -> MagicMock:
+    """Create a mock broadcaster with an optional pre-built queue.
+
+    If no queue is provided, creates one with an immediate None sentinel
+    so the stream terminates instantly.
+    """
+    if queue is None:
+        queue = asyncio.Queue()
+        queue.put_nowait(None)
+    broadcaster = MagicMock()
+    broadcaster.subscribe_async = AsyncMock(return_value=queue)
+    broadcaster.unsubscribe_async = AsyncMock()
+    return broadcaster
+
+
 class TestSSEEndpointBasicStreaming:
     """Tests for GET /events basic SSE streaming."""
 
     @pytest.fixture
     def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+        return _make_app()
 
-    @pytest.mark.asyncio
     async def test_get_events_returns_200_with_event_stream_content_type(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster yields SSEEvent objects
-        THEN the response Content-Type is 'text/event-stream' and status is 200.
-        """
+        """SSE endpoint returns 200 with text/event-stream content type."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        async def mock_event_generator() -> AsyncGenerator[SSEEvent, None]:
-            yield SSEEvent(event="task_status_changed", data='{"task_id":"abc","status":"passed"}')
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="test", data="hello"))
+        queue.put_nowait(None)  # Sentinel: terminates stream
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=asyncio.Queue())
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -54,41 +76,30 @@ class TestSSEEndpointBasicStreaming:
                     content_type = response.headers.get("content-type", "")
                     assert "text/event-stream" in content_type
 
-    @pytest.mark.asyncio
     async def test_get_events_streams_sse_formatted_messages(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster yields SSEEvent objects
-        THEN the EventSourceResponse streams each event with 'event:' and 'data:' fields.
-        """
+        """Broadcaster events are streamed with event: and data: fields."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        test_event = SSEEvent(event="task_status_changed", data='{"task_id":"abc","status":"passed"}')
-        await test_queue.put(test_event)
-        await test_queue.put(None)  # Sentinel to end stream
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(
+            SSEEvent(event="task_status_changed", data='{"task_id":"abc","status":"passed"}')
+        )
+        queue.put_nowait(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                async with client.stream("GET", "/events") as response:
-                    assert response.status_code == 200
-                    content = b""
-                    async for chunk in response.aiter_bytes():
-                        content += chunk
-                        if b"\n\n" in content:
-                            break
-
-                    content_str = content.decode("utf-8")
-                    assert "event:" in content_str or "data:" in content_str
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
+                assert response.status_code == 200
+                content = response.text
+                assert "event:" in content or "data:" in content
 
 
 class TestSSEEndpointGracefulCompletion:
@@ -96,68 +107,45 @@ class TestSSEEndpointGracefulCompletion:
 
     @pytest.fixture
     def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+        return _make_app()
 
-    @pytest.mark.asyncio
     async def test_get_events_closes_gracefully_when_generator_completes(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client is connected to GET /events
-        WHEN the broadcaster's async generator completes (no more events)
-        THEN the response stream closes gracefully without raising an unhandled exception
-        and the HTTP status of the initial response was 200.
-        """
-        from tdd_orchestrator.api.sse import SSEEvent
-
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        await test_queue.put(None)  # Immediate completion (sentinel)
-
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        """Immediate None sentinel causes graceful stream close with 200."""
+        broadcaster = _make_broadcaster()  # Queue with only None sentinel
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                # This should complete without raising an exception
-                response = await client.get("/events")
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
                 assert response.status_code == 200
 
-    @pytest.mark.asyncio
     async def test_get_events_streams_multiple_events_before_completion(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client is connected to GET /events
-        WHEN the broadcaster yields multiple events then completes
-        THEN all events are streamed before graceful close.
-        """
+        """Multiple events are streamed before graceful close."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        await test_queue.put(SSEEvent(event="event1", data="data1"))
-        await test_queue.put(SSEEvent(event="event2", data="data2"))
-        await test_queue.put(None)  # End stream
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="event1", data="data1"))
+        queue.put_nowait(SSEEvent(event="event2", data="data2"))
+        queue.put_nowait(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/events")
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
                 assert response.status_code == 200
                 content = response.text
-                # Should contain both events
                 assert "data1" in content or "data2" in content
 
 
@@ -166,84 +154,56 @@ class TestSSEEndpointErrorHandling:
 
     @pytest.fixture
     def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+        return _make_app()
 
-    @pytest.mark.asyncio
-    async def test_get_events_logs_error_and_terminates_on_exception(
+    async def test_get_events_handles_subscribe_error_gracefully(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster raises an exception mid-stream
-        THEN the endpoint logs the error and terminates the SSE stream cleanly.
-        """
-        from tdd_orchestrator.api.sse import SSEEvent
+        """subscribe_async raising RuntimeError doesn't hang the endpoint."""
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(
+            side_effect=RuntimeError("Disconnected backend")
+        )
+        broadcaster.unsubscribe_async = AsyncMock()
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-
-        async def mock_subscribe() -> asyncio.Queue[SSEEvent | None]:
-            raise RuntimeError("Disconnected backend")
-
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(side_effect=RuntimeError("Disconnected backend"))
-        mock_broadcaster.unsubscribe_async = AsyncMock()
-
-        with (
-            patch(
-                "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-                return_value=mock_broadcaster,
-            ),
-            patch("tdd_orchestrator.api.routes.events.logger") as mock_logger,
+        with patch(
+            "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                # Should handle the error gracefully - either return error response
-                # or stream closes without hanging
                 try:
-                    async with client.stream("GET", "/events", timeout=5.0) as response:
-                        # If we get here, the endpoint handled the error gracefully
-                        # and returned some response
-                        assert response.status_code in [200, 500]
+                    response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
+                    # Endpoint handled error and returned some response
+                    assert response.status_code in [200, 500]
                 except Exception:
                     # Connection closed is acceptable behavior
                     pass
 
-    @pytest.mark.asyncio
     async def test_get_events_does_not_send_malformed_data_on_error(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster raises an exception mid-stream
-        THEN no malformed SSE data is sent.
-        """
+        """Stream data is well-formed even when stream ends early."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        # Put one valid event then simulate error via None
-        await test_queue.put(SSEEvent(event="test", data="valid"))
-        await test_queue.put(None)  # End stream
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="test", data="valid"))
+        queue.put_nowait(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/events")
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
                 content = response.text
-                # Verify no malformed data (partial lines, broken JSON, etc.)
-                # Each data line should be properly formatted
                 if content:
                     lines = content.split("\n")
                     for line in lines:
                         if line.startswith("data:"):
-                            # Data line should have content after "data: "
                             assert len(line) > 5 or line == "data:"
 
 
@@ -252,178 +212,142 @@ class TestSSEEndpointBackpressure:
 
     @pytest.fixture
     def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+        return _make_app()
 
-    @pytest.mark.asyncio
     async def test_get_events_begins_streaming_immediately(
         self, app: FastAPI
     ) -> None:
-        """GIVEN no SSE client is connected
-        WHEN a client initiates GET /events
-        THEN the endpoint immediately begins the streaming response (status 200,
-        Content-Type 'text/event-stream').
-        """
+        """Endpoint starts streaming response immediately (200, correct content-type)."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        # Don't put any events - stream should still start
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        # Put one event + sentinel so the stream terminates
+        queue.put_nowait(SSEEvent(event="init", data="ready"))
+        queue.put_nowait(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
-
-        response_started = asyncio.Event()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 async with client.stream("GET", "/events") as response:
-                    # Response should start immediately with correct headers
                     assert response.status_code == 200
                     content_type = response.headers.get("content-type", "")
                     assert "text/event-stream" in content_type
-                    # Break immediately - we don't need to wait for events
-                    break
 
-    @pytest.mark.asyncio
     async def test_get_events_blocks_on_broadcaster_until_event_arrives(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster's async generator yields after a short delay
-        THEN the endpoint blocks until the event arrives (backpressure-friendly).
-        """
+        """Endpoint blocks until broadcaster yields, then streams the event."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
         event_delivered = asyncio.Event()
 
         async def delayed_producer() -> None:
-            await asyncio.sleep(0.1)  # Short delay
-            await test_queue.put(SSEEvent(event="delayed", data="arrived"))
+            await asyncio.sleep(0.1)
+            await queue.put(SSEEvent(event="delayed", data="arrived"))
             event_delivered.set()
-            await test_queue.put(None)  # End stream
+            await queue.put(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                # Start producer in background
                 producer_task = asyncio.create_task(delayed_producer())
-
-                response = await client.get("/events", timeout=5.0)
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
                 assert response.status_code == 200
-
-                # Verify event was delivered
                 assert event_delivered.is_set()
                 assert "arrived" in response.text
-
                 await producer_task
 
 
 class TestSSEEndpointClientDisconnect:
-    """Tests for client disconnect handling."""
+    """Tests for client disconnect handling.
 
-    @pytest.fixture
-    def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+    Client disconnect is tested at the generator level (not HTTP) because
+    ASGITransport doesn't reliably propagate cancellation to server-side
+    coroutines. The generator's CancelledError handling is what matters.
+    """
 
-    @pytest.mark.asyncio
-    async def test_get_events_detects_client_disconnect(
-        self, app: FastAPI
-    ) -> None:
-        """GIVEN an SSE client is connected to GET /events
-        WHEN the client disconnects (simulated via cancelling the response read)
-        THEN the endpoint detects the disconnection and stops consuming from the
-        broadcaster's async generator.
+    async def test_generator_handles_cancellation_gracefully(self) -> None:
+        """Cancelling the generator triggers cleanup (unsubscribe).
+
+        The generator catches CancelledError internally and terminates
+        cleanly rather than propagating the error.
         """
+        from tdd_orchestrator.api.routes.events import event_stream
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        unsubscribe_called = asyncio.Event()
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        # No sentinel — simulates a long-lived stream
 
-        async def track_unsubscribe(queue: asyncio.Queue[Any]) -> None:
-            unsubscribe_called.set()
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(return_value=queue)
+        broadcaster.unsubscribe_async = AsyncMock()
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock(side_effect=track_unsubscribe)
+        gen = event_stream(broadcaster)
 
-        with patch(
-            "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
-        ):
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                async with client.stream("GET", "/events") as response:
-                    assert response.status_code == 200
-                    # Simulate client disconnect by breaking out early
-                    break
+        async def consume() -> list[dict[str, str]]:
+            results = []
+            async for event in gen:
+                results.append(event)
+            return results
 
-            # Give cleanup a moment to run
-            await asyncio.sleep(0.1)
+        task = asyncio.create_task(consume())
+        await asyncio.sleep(0.2)  # Let it start blocking on empty queue
+        task.cancel()
 
-            # Verify unsubscribe was called (cleanup happened)
-            # Note: The exact cleanup mechanism depends on implementation
-            # This test verifies that some cleanup occurs
-            assert mock_broadcaster.unsubscribe_async.called or mock_broadcaster.subscribe_async.called
+        # Generator catches CancelledError — task may complete cleanly or cancel
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
 
-    @pytest.mark.asyncio
-    async def test_get_events_stops_consuming_on_disconnect(
-        self, app: FastAPI
-    ) -> None:
-        """GIVEN an SSE client is connected to GET /events
-        WHEN the client disconnects
-        THEN the endpoint stops consuming from the broadcaster (no resource leak).
-        """
+        await asyncio.sleep(0.1)
+        broadcaster.unsubscribe_async.assert_called_once_with(queue)
+
+    async def test_generator_stops_on_cancellation_no_resource_leak(self) -> None:
+        """Cancelled generator doesn't leak — unsubscribe is always called."""
+        from tdd_orchestrator.api.routes.events import event_stream
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        cleanup_flag = asyncio.Event()
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="first", data="one"))
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
+        cleanup_called = asyncio.Event()
 
-        async def cleanup_unsubscribe(queue: asyncio.Queue[Any]) -> None:
-            cleanup_flag.set()
+        async def track_cleanup(q: asyncio.Queue[Any]) -> None:
+            cleanup_called.set()
 
-        mock_broadcaster.unsubscribe_async = AsyncMock(side_effect=cleanup_unsubscribe)
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(return_value=queue)
+        broadcaster.unsubscribe_async = AsyncMock(side_effect=track_cleanup)
 
-        with patch(
-            "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
-        ):
-            transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
-                async with client.stream("GET", "/events") as response:
-                    assert response.status_code == 200
-                    # Read a bit then disconnect
-                    try:
-                        async for _ in response.aiter_bytes():
-                            break  # Disconnect after first chunk or timeout
-                    except asyncio.TimeoutError:
-                        pass
+        gen = event_stream(broadcaster)
+        event = await gen.__anext__()
+        assert event["data"] == "one"
 
-            # Allow cleanup to execute
-            await asyncio.sleep(0.2)
+        # Now cancel during the second (blocking) iteration
+        task = asyncio.create_task(gen.__anext__())
+        await asyncio.sleep(0.2)
+        task.cancel()
 
-            # Either unsubscribe was called or no resource leak (verified by no hanging)
-            assert mock_broadcaster.subscribe_async.called
+        # Generator catches CancelledError and terminates — StopAsyncIteration
+        try:
+            await task
+        except (asyncio.CancelledError, StopAsyncIteration):
+            pass
+
+        await asyncio.sleep(0.1)
+        assert cleanup_called.is_set()
 
 
 class TestSSEEndpointRouterMounting:
@@ -433,7 +357,6 @@ class TestSSEEndpointRouterMounting:
         """The events router can be mounted on a FastAPI app."""
         app = FastAPI()
         app.include_router(router)
-        # If this doesn't raise, the router is mountable
         routes = [r.path for r in app.routes if hasattr(r, "path")]
         assert "/events" in routes
 
@@ -450,47 +373,41 @@ class TestSSEEndpointMethodNotAllowed:
 
     @pytest.fixture
     def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+        return _make_app()
 
-    @pytest.mark.asyncio
     async def test_post_events_returns_405(self, app: FastAPI) -> None:
         """POST /events returns HTTP 405 Method Not Allowed."""
-        mock_broadcaster = MagicMock()
+        broadcaster = _make_broadcaster()
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.post("/events")
                 assert response.status_code == 405
 
-    @pytest.mark.asyncio
     async def test_put_events_returns_405(self, app: FastAPI) -> None:
         """PUT /events returns HTTP 405 Method Not Allowed."""
-        mock_broadcaster = MagicMock()
+        broadcaster = _make_broadcaster()
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
                 response = await client.put("/events")
                 assert response.status_code == 405
 
-    @pytest.mark.asyncio
     async def test_delete_events_returns_405(self, app: FastAPI) -> None:
         """DELETE /events returns HTTP 405 Method Not Allowed."""
-        mock_broadcaster = MagicMock()
+        broadcaster = _make_broadcaster()
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -503,67 +420,135 @@ class TestSSEEventFormatting:
 
     @pytest.fixture
     def app(self) -> FastAPI:
-        """Create a FastAPI app with the events router mounted."""
-        app = FastAPI()
-        app.include_router(router)
-        return app
+        return _make_app()
 
-    @pytest.mark.asyncio
     async def test_get_events_formats_event_field_correctly(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster yields an SSEEvent with event type
-        THEN the streamed message contains 'event:' field.
-        """
+        """Streamed message contains 'event:' field."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
-        await test_queue.put(SSEEvent(event="task_status_changed", data="test"))
-        await test_queue.put(None)
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="task_status_changed", data="test"))
+        queue.put_nowait(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/events")
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
                 content = response.text
-                # Verify event field is present
                 assert "event:" in content or "data:" in content
 
-    @pytest.mark.asyncio
     async def test_get_events_formats_data_field_correctly(
         self, app: FastAPI
     ) -> None:
-        """GIVEN an SSE client connects to GET /events
-        WHEN the broadcaster yields an SSEEvent with JSON data
-        THEN the streamed message contains 'data:' field with the JSON.
-        """
+        """Streamed message contains 'data:' field with JSON payload."""
         from tdd_orchestrator.api.sse import SSEEvent
 
-        test_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
         json_data = '{"task_id":"abc","status":"passed"}'
-        await test_queue.put(SSEEvent(event="test", data=json_data))
-        await test_queue.put(None)
+        queue.put_nowait(SSEEvent(event="test", data=json_data))
+        queue.put_nowait(None)
 
-        mock_broadcaster = MagicMock()
-        mock_broadcaster.subscribe_async = AsyncMock(return_value=test_queue)
-        mock_broadcaster.unsubscribe_async = AsyncMock()
+        broadcaster = _make_broadcaster(queue)
 
         with patch(
             "tdd_orchestrator.api.routes.events.get_broadcaster_dep",
-            return_value=mock_broadcaster,
+            return_value=broadcaster,
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                response = await client.get("/events")
+                response = await asyncio.wait_for(client.get("/events"), timeout=5.0)
                 content = response.text
-                # Verify data field contains our JSON
                 assert "data:" in content
                 assert "task_id" in content or "abc" in content
+
+
+class TestEventStreamGenerator:
+    """Direct tests for the event_stream async generator.
+
+    Testing the generator directly avoids HTTP transport complexity
+    and is the most reliable way to verify SSE streaming behavior.
+    """
+
+    async def test_event_stream_yields_events_from_queue(self) -> None:
+        """Generator yields events from broadcaster queue."""
+        from tdd_orchestrator.api.routes.events import event_stream
+        from tdd_orchestrator.api.sse import SSEEvent
+
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="test", data="hello"))
+        queue.put_nowait(None)
+
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(return_value=queue)
+        broadcaster.unsubscribe_async = AsyncMock()
+
+        events = []
+        async for event in event_stream(broadcaster):
+            events.append(event)
+
+        assert len(events) == 1
+        assert events[0]["event"] == "test"
+        assert events[0]["data"] == "hello"
+
+    async def test_event_stream_stops_on_none_sentinel(self) -> None:
+        """Generator stops when None sentinel is received."""
+        from tdd_orchestrator.api.routes.events import event_stream
+        from tdd_orchestrator.api.sse import SSEEvent
+
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(SSEEvent(event="a", data="1"))
+        queue.put_nowait(SSEEvent(event="b", data="2"))
+        queue.put_nowait(None)
+        queue.put_nowait(SSEEvent(event="c", data="should-not-see"))
+
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(return_value=queue)
+        broadcaster.unsubscribe_async = AsyncMock()
+
+        events = []
+        async for event in event_stream(broadcaster):
+            events.append(event)
+
+        assert len(events) == 2
+        assert events[0]["data"] == "1"
+        assert events[1]["data"] == "2"
+
+    async def test_event_stream_calls_unsubscribe_on_completion(self) -> None:
+        """Generator calls unsubscribe_async during cleanup."""
+        from tdd_orchestrator.api.routes.events import event_stream
+        from tdd_orchestrator.api.sse import SSEEvent
+
+        queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+        queue.put_nowait(None)
+
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(return_value=queue)
+        broadcaster.unsubscribe_async = AsyncMock()
+
+        async for _ in event_stream(broadcaster):
+            pass
+
+        broadcaster.unsubscribe_async.assert_called_once_with(queue)
+
+    async def test_event_stream_handles_subscribe_error(self) -> None:
+        """Generator handles subscribe_async raising an exception."""
+        from tdd_orchestrator.api.routes.events import event_stream
+
+        broadcaster = MagicMock()
+        broadcaster.subscribe_async = AsyncMock(
+            side_effect=RuntimeError("Connection lost")
+        )
+        broadcaster.unsubscribe_async = AsyncMock()
+
+        events = []
+        async for event in event_stream(broadcaster):
+            events.append(event)
+
+        assert len(events) == 0
