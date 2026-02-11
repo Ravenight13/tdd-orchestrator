@@ -20,7 +20,8 @@ COMPLEXITY_SIGNALS: dict[str, dict[str, list[str]]] = {
         "medium": ["retry", "backoff", "cache", "queue"],
     },
     "data_processing": {
-        "high": ["streaming", "batch processing", "etl", "transformation"],
+        "high": ["streaming", "batch processing", "etl", "transformation",
+                 "sse", "server-sent event", "eventsource", "websocket"],
         "medium": ["parsing", "validation", "serialization"],
     },
 }

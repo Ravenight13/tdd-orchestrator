@@ -261,6 +261,10 @@ class LLMDecomposer:
             hints_count = sum(1 for t in tasks if t.implementation_hints)
             logger.info(f"Pass 4 complete: {hints_count} tasks received hints")
 
+            # Post-pass: Inject streaming-specific testing hints (deterministic)
+            from .streaming_hints import enrich_streaming_hints
+            tasks = enrich_streaming_hints(tasks)
+
             self.metrics.total_duration_seconds = time.time() - start_time
             return prerequisite_decomposed + tasks
 

@@ -140,7 +140,7 @@ RED_PROMPT_TEMPLATE = """You are a test writer. Your ONLY job is to write pytest
 
 ## ACCEPTANCE CRITERIA
 {criteria_text}
-{module_exports_section}{existing_api_section}
+{module_exports_section}{existing_api_section}{hints_section}
 ## FILES
 - **Test file to create**: {test_file}
 - **Implementation will be at**: {impl_file}

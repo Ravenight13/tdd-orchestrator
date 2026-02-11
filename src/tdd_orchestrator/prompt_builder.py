@@ -124,11 +124,22 @@ class PromptBuilder:
         existing_api_section = extract_impl_signatures(base_dir, impl_file)
         conftest_section = read_conftest(base_dir, test_file)
 
+        # Build hints section for RED (testing patterns guidance)
+        hints_section = ""
+        hints_raw = task.get("implementation_hints") or ""
+        if isinstance(hints_raw, str) and hints_raw.strip():
+            hints_text = hints_raw[:MAX_HINTS_CONTENT]
+            hints_section = (
+                f"\n## TESTING PATTERNS\n"
+                f"{escape_braces(hints_text)}\n"
+            )
+
         return RED_PROMPT_TEMPLATE.format(
             goal=escape_braces(task.get("goal", "No goal specified")),
             criteria_text=escape_braces(criteria_text),
             module_exports_section=module_exports_section,
             existing_api_section=existing_api_section,
+            hints_section=hints_section,
             sibling_tests_section=sibling_tests_section,
             conftest_section=conftest_section,
             test_file=escape_braces(test_file),

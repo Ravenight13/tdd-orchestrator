@@ -517,3 +517,25 @@ def test_build_unsupported_stage_raises(task: dict[str, Any]) -> None:
     fake_stage.__eq__ = lambda self, other: False
     with pytest.raises(ValueError, match="Unsupported stage"):
         PromptBuilder.build(fake_stage, task)
+
+
+def test_red_prompt_includes_hints_when_present(task: dict[str, Any]) -> None:
+    """RED prompt includes TESTING PATTERNS section when hints are provided."""
+    task["implementation_hints"] = "Use asyncio.wait_for for streaming tests."
+    result = PromptBuilder.red(task)
+    assert "## TESTING PATTERNS" in result
+    assert "asyncio.wait_for" in result
+
+
+def test_red_prompt_omits_hints_when_none(task: dict[str, Any]) -> None:
+    """RED prompt omits TESTING PATTERNS section when hints is None."""
+    task["implementation_hints"] = None
+    result = PromptBuilder.red(task)
+    assert "## TESTING PATTERNS" not in result
+
+
+def test_red_prompt_omits_hints_when_empty(task: dict[str, Any]) -> None:
+    """RED prompt omits TESTING PATTERNS section when hints is empty string."""
+    task["implementation_hints"] = ""
+    result = PromptBuilder.red(task)
+    assert "## TESTING PATTERNS" not in result
