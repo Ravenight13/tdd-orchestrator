@@ -79,11 +79,11 @@ async def init_dependencies(app: FastAPI | None = None) -> None:
     register_task_callback(_registered_callback)
 
 
-async def shutdown_dependencies(app: FastAPI) -> None:
+async def shutdown_dependencies(app: FastAPI | None = None) -> None:
     """Shut down application dependencies during shutdown.
 
     Args:
-        app: The FastAPI application instance.
+        app: The FastAPI application instance (optional).
     """
     import asyncio
     import inspect
@@ -146,11 +146,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Startup
     try:
-        await init_fn(app)
+        await init_fn()
         yield
     finally:
         # Shutdown - always called even if init fails
-        await shutdown_fn(app)
+        await shutdown_fn()
 
 
 async def _value_error_handler(request: Request, exc: ValueError) -> JSONResponse:

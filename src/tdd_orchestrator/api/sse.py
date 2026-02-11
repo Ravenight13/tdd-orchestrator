@@ -1,8 +1,18 @@
 """Server-Sent Events (SSE) broadcaster with graceful shutdown."""
 
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Coroutine, overload
+
+
+@dataclass
+class SSEEventData:
+    """Data payload for SSE events."""
+
+    task_id: str
+    status: str
 
 
 @dataclass
@@ -41,15 +51,63 @@ class SSEEvent:
         return "\n".join(lines) + "\n\n"
 
 
+class _SSESubscription:
+    """Async iterator wrapper for SSE event queue."""
+
+    def __init__(self, queue: asyncio.Queue[SSEEvent | None], broadcaster: "SSEBroadcaster") -> None:
+        """Initialize the subscription.
+
+        Args:
+            queue: The event queue to iterate over.
+            broadcaster: The broadcaster that owns this subscription.
+        """
+        self._queue: asyncio.Queue[SSEEvent | None] = queue
+        self._broadcaster: SSEBroadcaster = broadcaster
+
+    def __aiter__(self) -> AsyncIterator[SSEEvent]:
+        """Return self as async iterator."""
+        return self
+
+    async def __anext__(self) -> SSEEvent:
+        """Get the next event from the queue.
+
+        Returns:
+            The next SSEEvent.
+
+        Raises:
+            StopAsyncIteration: When None sentinel is received.
+        """
+        event = await self._queue.get()
+        if event is None:
+            raise StopAsyncIteration
+        return event
+
+    @property
+    def queue(self) -> asyncio.Queue[SSEEvent | None]:
+        """Get the underlying queue."""
+        return self._queue
+
+
 class SSEBroadcaster:
     """Thread-safe SSE broadcaster with graceful shutdown support."""
 
-    def __init__(self) -> None:
-        """Initialize the SSE broadcaster."""
+    def __init__(self, heartbeat_interval: float | None = None) -> None:
+        """Initialize the SSE broadcaster.
+
+        Args:
+            heartbeat_interval: Optional interval in seconds for sending heartbeats.
+                               If provided, a background task will send heartbeat events.
+        """
         self._subscribers: set[asyncio.Queue[SSEEvent | None]] = set()
         self._subscribers_generic: set[asyncio.Queue[Any]] = set()
         self._lock: asyncio.Lock = asyncio.Lock()
         self._shutdown: bool = False
+        self._heartbeat_interval: float | None = heartbeat_interval
+        self._heartbeat_task: asyncio.Task[None] | None = None
+
+        # Start heartbeat task if interval is provided
+        if self._heartbeat_interval is not None:
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
     @property
     def subscriber_count(self) -> int:
@@ -66,17 +124,17 @@ class SSEBroadcaster:
         # Cast to the more specific type expected by tests
         return self._subscribers  # type: ignore[return-value]
 
-    def subscribe(self, queue: asyncio.Queue[SSEEvent] | None = None) -> asyncio.Queue[Any]:
+    def subscribe(self, queue: asyncio.Queue[SSEEvent] | None = None) -> _SSESubscription | asyncio.Queue[Any]:
         """Subscribe a new client with optional queue parameter.
 
-        When called without arguments: creates and returns a new generic queue.
+        When called without arguments: creates and returns a new async iterator subscription.
         When called with a queue: synchronously adds the queue to subscribers.
 
         Args:
             queue: Optional queue to subscribe. If provided, it's added to subscribers.
 
         Returns:
-            If no queue: new generic queue.
+            If no queue: new _SSESubscription async iterator.
             If queue provided: the same queue that was added.
         """
         if queue is not None:
@@ -84,18 +142,24 @@ class SSEBroadcaster:
             self._subscribers.add(queue)  # type: ignore[arg-type]
             return queue
         else:
-            # Legacy behavior: create and return new generic queue
-            new_queue: asyncio.Queue[Any] = asyncio.Queue()
-            self._subscribers_generic.add(new_queue)
-            return new_queue
+            # New behavior: create queue and return async iterator wrapper
+            new_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
+            self._subscribers.add(new_queue)
+            return _SSESubscription(new_queue, self)
 
-    def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
-        """Unsubscribe a client by removing their queue (synchronous version).
+    async def unsubscribe(self, subscription: _SSESubscription | asyncio.Queue[Any]) -> None:
+        """Unsubscribe a client by removing their subscription or queue.
 
         Args:
-            queue: The queue to remove from subscribers.
+            subscription: The subscription or queue to remove from subscribers.
         """
-        self._subscribers_generic.discard(queue)
+        if isinstance(subscription, _SSESubscription):
+            # Extract the queue from the subscription
+            queue = subscription.queue
+            self._subscribers.discard(queue)
+        else:
+            # Handle raw queue (legacy path)
+            self._subscribers_generic.discard(subscription)
 
     @overload
     def publish(self, event: dict[str, Any]) -> None: ...
@@ -199,6 +263,28 @@ class SSEBroadcaster:
                     # Skip if queue is full
                     pass
 
+    async def _heartbeat_loop(self) -> None:
+        """Background task that sends periodic heartbeat events to all subscribers."""
+        if self._heartbeat_interval is None:
+            return
+
+        while not self._shutdown:
+            try:
+                await asyncio.sleep(self._heartbeat_interval)
+
+                if self._shutdown:
+                    break
+
+                # Send heartbeat event to all subscribers
+                heartbeat_event = SSEEvent(event="heartbeat", data="")
+                await self.publish(heartbeat_event)
+
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                # Continue on any other error
+                pass
+
     async def shutdown(self) -> None:
         """Gracefully shutdown the broadcaster.
 
@@ -211,6 +297,14 @@ class SSEBroadcaster:
                 return
 
             self._shutdown = True
+
+            # Cancel heartbeat task if running
+            if self._heartbeat_task is not None:
+                self._heartbeat_task.cancel()
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
 
             # Send sentinel to all subscribers
             for queue in list(self._subscribers):
@@ -228,3 +322,38 @@ class SSEBroadcaster:
 
             # Clear all subscribers
             self._subscribers.clear()
+
+
+class CircuitBreaker:
+    """Circuit breaker that publishes SSE events when it trips."""
+
+    def __init__(self, broadcaster: SSEBroadcaster) -> None:
+        """Initialize the circuit breaker with a broadcaster.
+
+        Args:
+            broadcaster: The SSE broadcaster to publish events to.
+        """
+        self._broadcaster: SSEBroadcaster = broadcaster
+
+    async def trip(self, breaker_name: str, new_state: str) -> None:
+        """Trip the circuit breaker and publish an SSE event.
+
+        Args:
+            breaker_name: The name of the breaker that tripped.
+            new_state: The new state of the breaker.
+        """
+        event_data = {"breaker_name": breaker_name, "new_state": new_state}
+        event = SSEEvent(event="circuit_breaker_tripped", data=json.dumps(event_data))
+        await self._broadcaster.publish(event)
+
+
+def wire_circuit_breaker_sse(broadcaster: SSEBroadcaster) -> CircuitBreaker:
+    """Wire a circuit breaker to publish events through the broadcaster.
+
+    Args:
+        broadcaster: The SSE broadcaster to wire to.
+
+    Returns:
+        A circuit breaker instance wired to the broadcaster.
+    """
+    return CircuitBreaker(broadcaster)
