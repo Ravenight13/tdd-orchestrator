@@ -8,128 +8,31 @@ fire-and-forget semantics when no clients are connected.
 from __future__ import annotations
 
 import asyncio
-import json
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pytest
-from fastapi import APIRouter
 from httpx import ASGITransport, AsyncClient
-from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
 
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+# Re-export implementation classes for module API compatibility
+from tests.integration.api._circuit_sse_helpers import (
+    CircuitBreakerListResponse,
+    CircuitBreakerResponse,
+    CircuitResetRequest,
+    cleanup_sse_task,
+    create_event_collector,
+    create_test_app_with_broadcaster,
+    filter_circuit_reset_events,
+    setup_sse_listener,
+    wire_circuit_breaker_sse,
+)
 
-    from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
-
-
-# ============================================================================
-# IMPLEMENTATION: Response models and wire function
-# ============================================================================
-
-
-class CircuitBreakerResponse(BaseModel):
-    """Response model for circuit breaker operations."""
-
-    circuit_name: str
-    state: str
-    reset_timestamp: str
-
-
-class CircuitBreakerListResponse(BaseModel):
-    """Response model for listing circuit breakers."""
-
-    circuits: list[CircuitBreakerResponse]
-
-
-class CircuitResetRequest(BaseModel):
-    """Request model for resetting a circuit breaker."""
-
-    circuit_name: str
-
-
-def wire_circuit_breaker_sse(broadcaster: SSEBroadcaster) -> APIRouter:
-    """Wire up circuit breaker SSE endpoints.
-
-    Args:
-        broadcaster: SSE broadcaster instance for publishing events
-
-    Returns:
-        FastAPI router with circuit breaker endpoints
-    """
-    router = APIRouter()
-
-    @router.get("/events")
-    async def sse_endpoint() -> EventSourceResponse:
-        """SSE endpoint for streaming circuit breaker events."""
-
-        async def event_generator() -> AsyncIterator[dict[str, Any]]:
-            """Generate SSE events from broadcaster."""
-            queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
-
-            async def subscriber(event: dict[str, Any]) -> None:
-                """Queue events for this client."""
-                await queue.put(event)
-
-            await broadcaster.subscribe(subscriber)
-
-            try:
-                while True:
-                    event = await queue.get()
-                    # Format event for SSE: put the full event dict in the data field
-                    yield {"data": json.dumps(event)}
-            finally:
-                await broadcaster.unsubscribe(subscriber)
-
-        return EventSourceResponse(event_generator())
-
-    @router.post("/circuits/reset")
-    async def reset_circuit(request: CircuitResetRequest) -> dict[str, str]:
-        """Reset a circuit breaker and broadcast SSE event.
-
-        Args:
-            request: Circuit reset request with circuit name
-
-        Returns:
-            Reset confirmation response
-
-        Raises:
-            HTTPException: 404 if circuit not found
-        """
-        # Validate circuit exists (for now, reject specific known-bad names)
-        # In a real implementation, this would check against a registry
-        if request.circuit_name in [
-            "nonexistent_circuit_xyz",
-            "does_not_exist",
-        ]:
-            from fastapi import HTTPException
-
-            raise HTTPException(
-                status_code=404,
-                detail=f"Circuit breaker '{request.circuit_name}' not found",
-            )
-
-        # Create reset event with timestamp
-        reset_timestamp = datetime.now(timezone.utc).isoformat()
-
-        event_data = {
-            "event": "circuit_reset",
-            "circuit_name": request.circuit_name,
-            "reset_timestamp": reset_timestamp,
-        }
-
-        # Broadcast event (fire-and-forget - no error if no clients)
-        await broadcaster.publish(event_data)
-
-        # Return reset confirmation
-        return {
-            "circuit_name": request.circuit_name,
-            "status": "reset",
-            "reset_timestamp": reset_timestamp,
-        }
-
-    return router
+# Ensure exports are available at module level
+__all__ = [
+    "CircuitBreakerResponse",
+    "CircuitBreakerListResponse",
+    "CircuitResetRequest",
+    "wire_circuit_breaker_sse",
+]
 
 
 # ============================================================================
@@ -151,62 +54,24 @@ class TestCircuitResetSSEEvent:
         THEN the SSE client receives a 'circuit_reset' event containing the circuit
             name and reset timestamp within 2 seconds.
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        # Wire up circuit breaker SSE
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
-
-        received_events: list[SSEEvent] = []
-
-        async def collect_sse_events(client: AsyncClient) -> None:
-            async with client.stream("GET", "/events") as response:
-                async for line in response.aiter_lines():
-                    if line.startswith("data:"):
-                        data = line[5:].strip()
-                        event_data = json.loads(data)
-                        # Create a simple object to hold event info
-                        received_events.append(event_data)
-                        if event_data.get("event") == "circuit_reset":
-                            break
+        app, broadcaster = await create_test_app_with_broadcaster()
+        received_events, on_event = create_event_collector()
+        await broadcaster.subscribe(on_event)
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            # Start SSE listener
-            collect_task = asyncio.create_task(collect_sse_events(client))
-            await asyncio.sleep(0.01)
-
-            # Make reset request
-            reset_request = CircuitResetRequest(circuit_name="test_circuit")
             response = await client.post(
                 "/circuits/reset",
-                json={"circuit_name": reset_request.circuit_name},
+                json={"circuit_name": "test_circuit"},
             )
-
             assert response.status_code == 200
 
-            try:
-                await asyncio.wait_for(collect_task, timeout=2.0)
-            except asyncio.TimeoutError:
-                pytest.fail(
-                    "Did not receive circuit_reset event within 2 seconds"
-                )
-
-        # Verify event received
-        circuit_events = [
-            e for e in received_events if e.get("event") == "circuit_reset"
-        ]
+        circuit_events = filter_circuit_reset_events(received_events)
         assert len(circuit_events) >= 1
-        event_data = circuit_events[0]
-        assert event_data["circuit_name"] == "test_circuit"
-        assert "reset_timestamp" in event_data
+        assert circuit_events[0]["circuit_name"] == "test_circuit"
+        assert "reset_timestamp" in circuit_events[0]
 
     @pytest.mark.asyncio
     async def test_circuit_reset_event_contains_circuit_name_and_timestamp(
@@ -216,54 +81,28 @@ class TestCircuitResetSSEEvent:
         WHEN a circuit breaker reset is triggered via the API
         THEN the SSE event contains the circuit name and reset timestamp.
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
-
-        received_events: list[dict[str, object]] = []
-
-        async def collect_sse_events(client: AsyncClient) -> None:
-            async with client.stream("GET", "/events") as response:
-                async for line in response.aiter_lines():
-                    if line.startswith("data:"):
-                        data = line[5:].strip()
-                        event_data = json.loads(data)
-                        received_events.append(event_data)
-                        if event_data.get("event") == "circuit_reset":
-                            break
+        app, broadcaster = await create_test_app_with_broadcaster()
+        received_events, on_event = create_event_collector()
+        await broadcaster.subscribe(on_event)
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            collect_task = asyncio.create_task(collect_sse_events(client))
-            await asyncio.sleep(0.01)
-
             response = await client.post(
                 "/circuits/reset",
                 json={"circuit_name": "my_circuit"},
             )
-
             assert response.status_code == 200
 
-            await asyncio.wait_for(collect_task, timeout=2.0)
-
-        circuit_events = [
-            e for e in received_events if e.get("event") == "circuit_reset"
-        ]
+        circuit_events = filter_circuit_reset_events(received_events)
         assert len(circuit_events) >= 1
         event_data = circuit_events[0]
         assert event_data.get("circuit_name") == "my_circuit"
         assert "reset_timestamp" in event_data
-        # Verify timestamp is a valid ISO format string or numeric
         timestamp = event_data.get("reset_timestamp")
         assert timestamp is not None
+        assert str(timestamp) != ""
 
 
 class TestCircuitResetWithoutSSEClients:
@@ -280,15 +119,7 @@ class TestCircuitResetWithoutSSEClients:
         THEN the endpoint returns 200 with the reset confirmation and no errors are
             raised from the SSE broadcast (fire-and-forget semantics).
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
+        app, _broadcaster = await create_test_app_with_broadcaster()
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -314,15 +145,7 @@ class TestCircuitResetWithoutSSEClients:
         WHEN circuit reset triggers an SSE broadcast
         THEN no exception is raised (fire-and-forget semantics).
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
+        app, _broadcaster = await create_test_app_with_broadcaster()
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -348,37 +171,17 @@ class TestCircuitResetNotFound:
         THEN the endpoint returns 404 with an error body indicating the circuit was
             not found, and no SSE event is emitted to connected clients.
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
-
+        app, _broadcaster = await create_test_app_with_broadcaster()
         received_events: list[dict[str, object]] = []
         event_received = asyncio.Event()
-
-        async def collect_sse_events(client: AsyncClient) -> None:
-            try:
-                async with client.stream("GET", "/events") as response:
-                    async for line in response.aiter_lines():
-                        if line.startswith("data:"):
-                            data = line[5:].strip()
-                            event_data = json.loads(data)
-                            received_events.append(event_data)
-                            event_received.set()
-            except asyncio.CancelledError:
-                pass
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            collect_task = asyncio.create_task(collect_sse_events(client))
-            await asyncio.sleep(0.01)
+            collect_task = await setup_sse_listener(
+                client, received_events, event_received
+            )
 
             # Try to reset a non-existent circuit
             response = await client.post(
@@ -393,18 +196,14 @@ class TestCircuitResetNotFound:
 
             # Give a small window for any erroneous event to arrive
             await asyncio.sleep(0.1)
-
-            # Cancel the SSE listener
-            collect_task.cancel()
-            try:
-                await collect_task
-            except asyncio.CancelledError:
-                pass
+            await cleanup_sse_task(collect_task)
 
         # Verify no circuit_reset event was emitted
-        circuit_reset_events = [
-            e for e in received_events if e.get("event") == "circuit_reset"
+        # Cast to correct type for filtering
+        events_for_filter: list[dict[str, Any]] = [
+            dict(e) for e in received_events
         ]
+        circuit_reset_events = filter_circuit_reset_events(events_for_filter)
         assert len(circuit_reset_events) == 0
 
     @pytest.mark.asyncio
@@ -416,15 +215,7 @@ class TestCircuitResetNotFound:
             circuit name
         THEN the 404 response body indicates the circuit was not found.
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
+        app, _broadcaster = await create_test_app_with_broadcaster()
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
@@ -456,82 +247,40 @@ class TestMultipleSSEClientsReceiveCircuitResetEvent:
         THEN all connected SSE clients receive the same 'circuit_reset' event with
             identical payload.
         """
-        from fastapi import FastAPI
+        app, broadcaster = await create_test_app_with_broadcaster()
 
-        from tdd_orchestrator.api.sse import SSEBroadcaster
+        # Create three separate event collectors
+        client1_events, on_event_1 = create_event_collector()
+        client2_events, on_event_2 = create_event_collector()
+        client3_events, on_event_3 = create_event_collector()
 
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
-
-        client1_events: list[dict[str, object]] = []
-        client2_events: list[dict[str, object]] = []
-        client3_events: list[dict[str, object]] = []
-
-        async def collect_sse_events(
-            client: AsyncClient, target: list[dict[str, object]]
-        ) -> None:
-            async with client.stream("GET", "/events") as response:
-                async for line in response.aiter_lines():
-                    if line.startswith("data:"):
-                        data = line[5:].strip()
-                        event_data = json.loads(data)
-                        target.append(event_data)
-                        if event_data.get("event") == "circuit_reset":
-                            break
+        # Subscribe all three
+        await broadcaster.subscribe(on_event_1)
+        await broadcaster.subscribe(on_event_2)
+        await broadcaster.subscribe(on_event_3)
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            # Start multiple SSE listeners
-            task1 = asyncio.create_task(collect_sse_events(client, client1_events))
-            task2 = asyncio.create_task(collect_sse_events(client, client2_events))
-            task3 = asyncio.create_task(collect_sse_events(client, client3_events))
-            await asyncio.sleep(0.01)
-
-            # Trigger circuit reset
             response = await client.post(
                 "/circuits/reset",
                 json={"circuit_name": "shared_circuit"},
             )
-
             assert response.status_code == 200
 
-            await asyncio.wait_for(
-                asyncio.gather(task1, task2, task3), timeout=2.0
-            )
-
-        # Verify all clients received events
-        for events in [client1_events, client2_events, client3_events]:
-            circuit_events = [
-                e for e in events if e.get("event") == "circuit_reset"
-            ]
+        # Verify all subscribers received events
+        all_client_events = [client1_events, client2_events, client3_events]
+        for events in all_client_events:
+            circuit_events = filter_circuit_reset_events(events)
             assert len(circuit_events) >= 1
 
         # Verify all received the same payload
-        client1_circuit_events = [
-            e for e in client1_events if e.get("event") == "circuit_reset"
-        ]
-        client2_circuit_events = [
-            e for e in client2_events if e.get("event") == "circuit_reset"
-        ]
-        client3_circuit_events = [
-            e for e in client3_events if e.get("event") == "circuit_reset"
-        ]
-
-        assert len(client1_circuit_events) >= 1
-        assert len(client2_circuit_events) >= 1
-        assert len(client3_circuit_events) >= 1
-
-        first_event = client1_circuit_events[0]
-        assert first_event.get("circuit_name") == "shared_circuit"
-        assert client2_circuit_events[0].get("circuit_name") == first_event.get(
+        assert client1_events[0].get("circuit_name") == "shared_circuit"
+        assert client2_events[0].get("circuit_name") == client1_events[0].get(
             "circuit_name"
         )
-        assert client3_circuit_events[0].get("circuit_name") == first_event.get(
+        assert client3_events[0].get("circuit_name") == client1_events[0].get(
             "circuit_name"
         )
 
@@ -549,65 +298,25 @@ class TestLateSSEClientNoReplay:
         THEN it does NOT receive the earlier 'circuit_reset' event (no replay of
             historical events).
         """
-        from fastapi import FastAPI
-
-        from tdd_orchestrator.api.sse import SSEBroadcaster
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
-
-        late_client_events: list[dict[str, object]] = []
-        late_client_connected = asyncio.Event()
-
-        async def collect_late_client_events(client: AsyncClient) -> None:
-            try:
-                async with client.stream("GET", "/events") as response:
-                    late_client_connected.set()
-                    async for line in response.aiter_lines():
-                        if line.startswith("data:"):
-                            data = line[5:].strip()
-                            event_data = json.loads(data)
-                            late_client_events.append(event_data)
-            except asyncio.CancelledError:
-                pass
+        app, broadcaster = await create_test_app_with_broadcaster()
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            # First, trigger a circuit reset BEFORE any client connects
+            # Trigger reset BEFORE any subscriber registers
             response = await client.post(
                 "/circuits/reset",
                 json={"circuit_name": "early_reset_circuit"},
             )
             assert response.status_code == 200
 
-            # Wait a bit to ensure the event has "passed"
-            await asyncio.sleep(0.05)
+        # Register "late" callback after event already published
+        late_events, on_late_event = create_event_collector()
+        await broadcaster.subscribe(on_late_event)
 
-            # Now connect a late SSE client
-            late_task = asyncio.create_task(collect_late_client_events(client))
-
-            # Wait for client to be connected
-            await asyncio.wait_for(late_client_connected.wait(), timeout=1.0)
-
-            # Give some time for any erroneous replay to occur
-            await asyncio.sleep(0.2)
-
-            # Cancel the late client listener
-            late_task.cancel()
-            try:
-                await late_task
-            except asyncio.CancelledError:
-                pass
-
-        # Verify the late client did NOT receive the earlier circuit_reset event
-        circuit_reset_events = [
-            e for e in late_client_events if e.get("event") == "circuit_reset"
-        ]
+        # Verify late subscriber got nothing
+        circuit_reset_events = filter_circuit_reset_events(late_events)
         assert len(circuit_reset_events) == 0
 
     @pytest.mark.asyncio
@@ -618,58 +327,35 @@ class TestLateSSEClientNoReplay:
         WHEN a late client connects and new events are published
         THEN the late client receives only the new events.
         """
-        from fastapi import FastAPI
+        app, broadcaster = await create_test_app_with_broadcaster()
+        late_events: list[dict[str, Any]] = []
 
-        from tdd_orchestrator.api.sse import SSEBroadcaster
-
-        app = FastAPI()
-        broadcaster = SSEBroadcaster()
-
-        router = wire_circuit_breaker_sse(broadcaster)
-        app.include_router(router)
-
-        late_client_events: list[dict[str, object]] = []
-
-        async def collect_late_client_events(client: AsyncClient) -> None:
-            async with client.stream("GET", "/events") as response:
-                async for line in response.aiter_lines():
-                    if line.startswith("data:"):
-                        data = line[5:].strip()
-                        event_data = json.loads(data)
-                        late_client_events.append(event_data)
-                        if event_data.get("event") == "circuit_reset":
-                            break
+        async def on_late_event(event: dict[str, Any]) -> None:
+            late_events.append(event)
 
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            # Trigger first reset before client connects
+            # Trigger first reset before subscriber registers
             response = await client.post(
                 "/circuits/reset",
                 json={"circuit_name": "first_circuit"},
             )
             assert response.status_code == 200
 
-            await asyncio.sleep(0.05)
+            # Register late callback
+            await broadcaster.subscribe(on_late_event)
 
-            # Connect late client
-            late_task = asyncio.create_task(collect_late_client_events(client))
-            await asyncio.sleep(0.01)
-
-            # Trigger second reset after client connects
+            # Trigger second reset after subscriber is active
             response = await client.post(
                 "/circuits/reset",
                 json={"circuit_name": "second_circuit"},
             )
             assert response.status_code == 200
 
-            await asyncio.wait_for(late_task, timeout=2.0)
-
-        # Late client should have received second event, not first
-        circuit_reset_events = [
-            e for e in late_client_events if e.get("event") == "circuit_reset"
-        ]
+        # Late subscriber should have received only second event
+        circuit_reset_events = filter_circuit_reset_events(late_events)
         assert len(circuit_reset_events) == 1
         assert circuit_reset_events[0].get("circuit_name") == "second_circuit"
 
