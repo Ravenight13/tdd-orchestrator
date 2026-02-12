@@ -90,3 +90,19 @@ def test_enrich_streaming_hints_leaves_non_streaming_unchanged() -> None:
     [unchanged] = enrich_streaming_hints([task])
     assert unchanged.implementation_hints == ""
     assert unchanged.complexity == "low"
+
+
+def test_streaming_hints_do_not_recommend_aiter_lines() -> None:
+    """Ensure the broken httpx aiter_lines pattern is not recommended as positive guidance.
+
+    The old hint #5 recommended ``client.stream() + aiter_lines()`` for HTTP-level
+    tests, which hangs with sse_starlette over httpx ASGITransport. The replacement
+    must only mention aiter_lines in a prohibition ("NEVER") or negative example
+    ("WRONG") context.
+    """
+    # The old positive recommendation must be gone
+    assert "For HTTP-level tests, use `client.stream()`" not in STREAMING_TEST_HINTS
+    # "NEVER" must appear before any mention of aiter_lines
+    never_pos = STREAMING_TEST_HINTS.index("NEVER")
+    aiter_pos = STREAMING_TEST_HINTS.index("aiter_lines")
+    assert never_pos < aiter_pos, "aiter_lines appears before any NEVER warning"

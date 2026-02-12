@@ -250,7 +250,7 @@ INSERT OR IGNORE INTO config (key, value, description) VALUES
     ('budget_warning_threshold', '80', 'Percentage of budget that triggers warning'),
     ('heartbeat_interval_seconds', '30', 'Worker heartbeat interval'),
     ('claim_timeout_seconds', '300', 'Task claim expiration timeout'),
-    ('verify_timeout_seconds', '60', 'Timeout in seconds for each pytest/ruff/mypy subprocess');
+    ('verify_timeout_seconds', '90', 'Timeout in seconds for each pytest/ruff/mypy subprocess');
 
 
 -- =============================================================================

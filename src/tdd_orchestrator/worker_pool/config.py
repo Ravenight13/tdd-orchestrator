@@ -18,10 +18,10 @@ STAGE_TIMEOUTS: dict[Stage, int] = {
     Stage.RED: 300,  # 5 min - writing failing tests
     Stage.RED_FIX: 300,  # 5 min - fixing static review issues
     Stage.GREEN: 600,  # 10 min - implementing code to pass tests
-    Stage.VERIFY: 60,  # 1 min - running quality checks
+    Stage.VERIFY: 180,  # 3 min - running quality checks (pytest + ruff + mypy + overhead)
     Stage.REFACTOR: 300,  # 5 min - improving code structure
     Stage.FIX: 300,  # 5 min - fixing issues
-    Stage.RE_VERIFY: 60,  # 1 min - re-running quality checks
+    Stage.RE_VERIFY: 180,  # 3 min - re-running quality checks
 }
 
 # Stage-specific max_turns for SDK calls

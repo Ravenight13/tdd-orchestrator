@@ -37,21 +37,21 @@ STREAMING_TEST_HINTS: str = """\
 
 **CRITICAL: Streaming endpoints hang forever if tested incorrectly.**
 
-1. **Never `await client.get()` on streaming endpoints** — the response never
+1. **Never `await client.get()` on streaming endpoints** -- the response never
    completes because the server keeps the connection open. This is the #1 cause
    of hanging tests.
 
-2. **Use sentinel-based stream termination** — have the generator yield a final
+2. **Use sentinel-based stream termination** -- have the generator yield a final
    sentinel value (e.g., `None` in a queue, or a `data: [DONE]` event) so the
    consumer knows when to stop reading.
 
-3. **Always wrap with `asyncio.wait_for(coro, timeout=...)`** — even with
+3. **Always wrap with `asyncio.wait_for(coro, timeout=...)`** -- even with
    sentinels, add a timeout as a safety net:
    ```python
    result = await asyncio.wait_for(consume_stream(), timeout=5.0)
    ```
 
-4. **Test the async generator directly** — instead of going through HTTP,
+4. **Test the async generator directly** -- instead of going through HTTP,
    call the generator function and iterate with `async for`:
    ```python
    events = []
@@ -60,15 +60,33 @@ STREAMING_TEST_HINTS: str = """\
    assert len(events) > 0
    ```
 
-5. **For HTTP-level tests, use `client.stream()` context manager** (httpx) or
-   the equivalent streaming API of your test client:
+5. **NEVER use httpx `client.stream()` + `aiter_lines()` for SSE endpoints** --
+   httpx's ASGITransport does NOT support true streaming with
+   `sse_starlette.EventSourceResponse`. The `aiter_lines()` call will hang
+   indefinitely because ASGITransport buffers the entire response.
+
+   Instead, test SSE behavior through:
+   - **Direct generator/broadcaster testing**: Call the underlying async generator
+     or `SSEBroadcaster.subscribe()` callback and verify events are emitted.
+   - **Queue-based testing**: Push events into the broadcaster, then assert the
+     subscriber callback received them.
    ```python
-   async with client.stream("GET", "/events") as response:
-       async for line in response.aiter_lines():
-           ...
+   # CORRECT: Test the broadcaster/generator directly
+   received: list[dict[str, str]] = []
+   async def on_event(event: dict[str, str]) -> None:
+       received.append(event)
+
+   broadcaster.subscribe(on_event)
+   await broadcaster.publish({"data": "hello"})
+   assert len(received) == 1
+
+   # WRONG: This will hang forever
+   # async with client.stream("GET", "/events") as response:
+   #     async for line in response.aiter_lines():
+   #         ...
    ```
 
-6. **Keep test data small** — use 2-3 events max to keep tests fast and
+6. **Keep test data small** -- use 2-3 events max to keep tests fast and
    deterministic.
 """
 
