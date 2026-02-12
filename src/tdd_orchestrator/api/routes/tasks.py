@@ -37,99 +37,6 @@ class TaskComplexity(str, Enum):
     HIGH = "high"
 
 
-def list_tasks(
-    status: str | None = None,
-    phase: str | None = None,
-    complexity: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-) -> dict[str, Any]:
-    """List tasks with filtering and pagination.
-
-    This is a placeholder function that will be replaced with actual
-    database queries. For now, it returns an empty result structure.
-
-    Args:
-        status: Optional status filter.
-        phase: Optional phase filter.
-        complexity: Optional complexity filter.
-        limit: Maximum number of tasks to return.
-        offset: Number of tasks to skip.
-
-    Returns:
-        A dictionary with tasks list, total count, limit, and offset.
-    """
-    return {
-        "tasks": [],
-        "total": 0,
-        "limit": limit,
-        "offset": offset,
-    }
-
-
-def get_task_stats() -> dict[str, int]:
-    """Get aggregate task counts by status.
-
-    This is a placeholder function that will be replaced with actual
-    database queries. For now, it returns all zeros.
-
-    Returns:
-        A dictionary with counts for each status and total count.
-    """
-    return {
-        "pending": 0,
-        "running": 0,
-        "passed": 0,
-        "failed": 0,
-        "total": 0,
-    }
-
-
-def get_task_progress() -> dict[str, float]:
-    """Get phase-level completion percentages.
-
-    This is a placeholder function that will be replaced with actual
-    database queries. For now, it returns an empty dictionary.
-
-    Returns:
-        A dictionary mapping phase names to completion percentages.
-    """
-    return {}
-
-
-def get_task_detail(task_key: str) -> dict[str, Any] | None:
-    """Get task detail with full attempt history.
-
-    This is a placeholder function that will be replaced with actual
-    database queries. For now, it returns None.
-
-    Args:
-        task_key: The unique task identifier.
-
-    Returns:
-        A dictionary with task details and nested attempts, or None if not found.
-    """
-    return None
-
-
-def retry_task(task_key: str) -> dict[str, Any]:
-    """Reset a task's status to pending.
-
-    This is a placeholder function that will be replaced with actual
-    database queries. For now, it returns a basic response structure.
-
-    Args:
-        task_key: The unique task identifier.
-
-    Returns:
-        A dictionary with the updated task data showing status as pending.
-    """
-    return {
-        "task_key": task_key,
-        "status": "pending",
-    }
-
-
 @router.get("")
 async def get_tasks(
     status: TaskStatus | None = Query(None, description="Filter by task status"),
@@ -218,18 +125,7 @@ async def get_tasks(
             for row in rows
         ]
         return {"tasks": tasks_list, "total": total, "limit": limit, "offset": offset}
-    # Convert enums to strings for the list_tasks function
-    status_str = status.value if status else None
-    phase_str = phase.value if phase else None
-    complexity_str = complexity.value if complexity else None
-
-    return list_tasks(
-        status=status_str,
-        phase=phase_str,
-        complexity=complexity_str,
-        limit=limit,
-        offset=offset,
-    )
+    raise HTTPException(status_code=503, detail="Database not available")
 
 
 @router.get("/stats")
@@ -267,7 +163,7 @@ async def get_stats(db: Any = Depends(get_db_dep)) -> dict[str, int]:
             "failed": counts["failed"],
             "total": total,
         }
-    return get_task_stats()
+    raise HTTPException(status_code=503, detail="Database not available")
 
 
 @router.get("/progress")
@@ -283,7 +179,7 @@ async def get_progress(db: Any = Depends(get_db_dep)) -> dict[str, Any]:
     if db is not None and hasattr(db, "_conn") and db._conn is not None:
         progress: dict[str, Any] = await db.get_progress()
         return progress
-    return get_task_progress()
+    raise HTTPException(status_code=503, detail="Database not available")
 
 
 @router.get("/{task_key}")
@@ -339,10 +235,7 @@ async def get_task_detail_endpoint(
                 for a in attempts
             ],
         }
-    task_detail = get_task_detail(task_key)
-    if task_detail is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return task_detail
+    raise HTTPException(status_code=503, detail="Database not available")
 
 
 @router.post("/{task_key}/retry")
@@ -403,32 +296,4 @@ async def retry_task_endpoint(
 
         return {"task_key": task_key, "status": "pending"}
 
-    # Fallback to placeholder
-    task_detail = get_task_detail(task_key)
-    if task_detail is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    current_status = task_detail.get("status")
-    if current_status != "failed":
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"Cannot retry task with status '{current_status}'."
-                " Only failed tasks can be retried."
-            ),
-        )
-
-    updated_task = retry_task(task_key)
-
-    try:
-        await broadcaster.publish(
-            {
-                "event": "task_status_changed",
-                "task_key": task_key,
-                "status": "pending",
-            }
-        )
-    except Exception:
-        pass
-
-    return updated_task
+    raise HTTPException(status_code=503, detail="Database not available")

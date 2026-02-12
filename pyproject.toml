@@ -51,3 +51,7 @@ mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "regression: marks tests as regression tests",
+    "slow: marks tests as slow-running",
+]

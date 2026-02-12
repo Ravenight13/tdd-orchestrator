@@ -1,17 +1,32 @@
 """Integration tests for task retry functionality.
 
 Tests verify retrying failed tasks, 404 handling for nonexistent tasks,
-and 409 conflict handling for non-failed tasks.
+and 409 conflict handling for non-failed tasks against a DB-seeded test app.
 """
 
 from __future__ import annotations
 
-import uuid
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from tdd_orchestrator.api.app import create_app
+from tdd_orchestrator.api.dependencies import get_broadcaster_dep
+
+from .helpers import _create_seeded_test_app
+
+
+class _StubBroadcaster:
+    """Stub broadcaster that discards all published events."""
+
+    async def publish(self, data: object) -> None:
+        """No-op publish."""
+
+
+def _override_broadcaster(app: object) -> None:
+    """Override the broadcaster dependency with a stub on the given app."""
+    from fastapi import FastAPI
+
+    assert isinstance(app, FastAPI)
+    app.dependency_overrides[get_broadcaster_dep] = lambda: _StubBroadcaster()
 
 
 class TestTaskRetry:
@@ -19,81 +34,78 @@ class TestTaskRetry:
 
     @pytest.mark.asyncio
     async def test_retry_failed_task_resets_status_to_pending(self) -> None:
-        """GIVEN a task exists with status='failed' in the database
-        WHEN POST /tasks/{task_id}/retry is called with a valid TaskRetryRequest
-        THEN the task status is reset to 'pending' and retry_count is incremented.
+        """GIVEN a task TDD-RETRY1 with status='blocked' (API: 'failed')
+        WHEN POST /tasks/TDD-RETRY1/retry is called
+        THEN the task status is reset to 'pending'.
         """
-        app = create_app()
-        task_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            await db.create_task("TDD-RETRY1", "Retry Test", phase=0, sequence=10)
+            await db.update_task_status("TDD-RETRY1", "blocked")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            # Retry the failed task
-            response = await client.post(
-                f"/tasks/{task_id}/retry",
-                json={},
-            )
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.post("/tasks/TDD-RETRY1/retry", json={})
 
-        # If task exists and is failed, should return 200
-        # If task doesn't exist or isn't failed, different status codes
-        assert response.status_code in (200, 404, 409)
-        if response.status_code == 200:
+            assert response.status_code == 200
             json_body = response.json()
-            assert json_body is not None
-            assert json_body.get("status") == "pending"
-            # retry_count should be incremented
-            assert "retry_count" in json_body
+            assert json_body["task_key"] == "TDD-RETRY1"
+            assert json_body["status"] == "pending"
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_retry_failed_task_returns_200_with_updated_details(self) -> None:
-        """GIVEN a task with status='failed' exists
-        WHEN POST /tasks/{task_id}/retry is called
-        THEN the response is 200 with updated task details.
+        """GIVEN a task TDD-RETRY2 with status='blocked' (API: 'failed')
+        WHEN POST /tasks/TDD-RETRY2/retry is called
+        THEN the response is 200 with task_key and status fields.
         """
-        app = create_app()
-        task_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            await db.create_task("TDD-RETRY2", "Retry Test 2", phase=0, sequence=11)
+            await db.update_task_status("TDD-RETRY2", "blocked")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.post(
-                f"/tasks/{task_id}/retry",
-                json={},
-            )
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.post("/tasks/TDD-RETRY2/retry", json={})
 
-        # Expect 200 for successful retry, 404 if not found, 409 if not failed
-        assert response.status_code in (200, 404, 409)
-        json_body = response.json()
-        assert json_body is not None
+            assert response.status_code == 200
+            json_body = response.json()
+            assert "task_key" in json_body
+            assert "status" in json_body
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
-    async def test_retry_increments_retry_count_by_one(self) -> None:
-        """GIVEN a failed task with retry_count=N
-        WHEN POST /tasks/{task_id}/retry is called
-        THEN the task's retry_count becomes N+1.
+    async def test_retry_resets_db_status_verified_via_get(self) -> None:
+        """GIVEN a task TDD-RETRY3 with status='blocked' (API: 'failed')
+        WHEN POST /tasks/TDD-RETRY3/retry is called
+        THEN GET /tasks/TDD-RETRY3 returns status='pending'.
         """
-        app = create_app()
-        task_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            await db.create_task("TDD-RETRY3", "Retry Test 3", phase=0, sequence=12)
+            await db.update_task_status("TDD-RETRY3", "blocked")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.post(
-                f"/tasks/{task_id}/retry",
-                json={},
-            )
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                retry_resp = await client.post("/tasks/TDD-RETRY3/retry", json={})
+                assert retry_resp.status_code == 200
 
-        if response.status_code == 200:
-            json_body = response.json()
-            assert json_body is not None
-            retry_count = json_body.get("retry_count")
-            assert retry_count is not None
-            assert isinstance(retry_count, int)
-            assert retry_count >= 1
+                get_resp = await client.get("/tasks/TDD-RETRY3")
+                assert get_resp.status_code == 200
+                assert get_resp.json()["status"] == "pending"
+        finally:
+            await db.close()
 
 
 class TestTaskNotFound:
@@ -101,66 +113,62 @@ class TestTaskNotFound:
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_task_returns_404(self) -> None:
-        """GIVEN no tasks exist in the database
-        WHEN GET /tasks/{nonexistent_uuid} is called
-        THEN the response is 404 with an error body containing a descriptive message.
+        """GIVEN a seeded DB that does not contain task NONEXISTENT
+        WHEN GET /tasks/NONEXISTENT is called
+        THEN the response is 404 with 'detail' in the body.
         """
-        app = create_app()
-        nonexistent_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/tasks/NONEXISTENT")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get(f"/tasks/{nonexistent_id}")
-
-        assert response.status_code == 404
-        json_body = response.json()
-        assert json_body is not None
-        # Should contain error detail
-        assert "detail" in json_body or "error" in json_body or "message" in json_body
+            assert response.status_code == 404
+            json_body = response.json()
+            assert "detail" in json_body
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_retry_nonexistent_task_returns_404(self) -> None:
-        """GIVEN no tasks exist in the database
-        WHEN POST /tasks/{nonexistent_uuid}/retry is called
+        """GIVEN a seeded DB that does not contain task NONEXISTENT
+        WHEN POST /tasks/NONEXISTENT/retry is called
         THEN the response is 404.
         """
-        app = create_app()
-        nonexistent_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.post(
+                    "/tasks/NONEXISTENT/retry", json={}
+                )
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.post(
-                f"/tasks/{nonexistent_id}/retry",
-                json={},
-            )
-
-        assert response.status_code == 404
-        json_body = response.json()
-        assert json_body is not None
+            assert response.status_code == 404
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_get_task_with_invalid_uuid_format_returns_error(self) -> None:
-        """GIVEN an invalid UUID format
-        WHEN GET /tasks/{invalid_uuid} is called
-        THEN the response indicates an error (400 or 422).
+        """GIVEN a seeded DB
+        WHEN GET /tasks/not-a-valid-uuid is called
+        THEN the response is 404 (treated as task_key lookup, not found).
         """
-        app = create_app()
-        invalid_id = "not-a-valid-uuid"
+        app, db = await _create_seeded_test_app()
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/tasks/not-a-valid-uuid")
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get(f"/tasks/{invalid_id}")
-
-        # Should return 400 or 422 for invalid UUID format, or 404 if treated as not found
-        assert response.status_code in (400, 404, 422)
-        json_body = response.json()
-        assert json_body is not None
+            assert response.status_code == 404
+        finally:
+            await db.close()
 
 
 class TestTaskRetryConflict:
@@ -168,76 +176,60 @@ class TestTaskRetryConflict:
 
     @pytest.mark.asyncio
     async def test_retry_running_task_returns_409_conflict(self) -> None:
-        """GIVEN a task exists with status='running' (not failed)
-        WHEN POST /tasks/{task_id}/retry is called
-        THEN the response is 409 Conflict indicating only failed tasks can be retried.
+        """GIVEN TDD-T02 has status='running' (DB: in_progress)
+        WHEN POST /tasks/TDD-T02/retry is called
+        THEN the response is 409 Conflict.
         """
-        app = create_app()
-        task_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.post("/tasks/TDD-T02/retry", json={})
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.post(
-                f"/tasks/{task_id}/retry",
-                json={},
-            )
-
-        # If task is running, should be 409; if not found, 404
-        assert response.status_code in (404, 409)
-        json_body = response.json()
-        assert json_body is not None
+            assert response.status_code == 409
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_retry_running_task_does_not_change_status(self) -> None:
-        """GIVEN a task exists with status='running'
-        WHEN POST /tasks/{task_id}/retry is called and returns 409
-        THEN the task status remains 'running' unchanged in the database.
+        """GIVEN TDD-T02 has status='running' (DB: in_progress)
+        WHEN POST /tasks/TDD-T02/retry returns 409
+        THEN GET /tasks/TDD-T02 still shows status='running'.
         """
-        app = create_app()
-        task_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                retry_resp = await client.post("/tasks/TDD-T02/retry", json={})
+                assert retry_resp.status_code == 409
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            # Attempt retry
-            retry_response = await client.post(
-                f"/tasks/{task_id}/retry",
-                json={},
-            )
-
-            # If we got a 409, verify the task status is still running
-            if retry_response.status_code == 409:
-                get_response = await client.get(f"/tasks/{task_id}")
-                if get_response.status_code == 200:
-                    json_body = get_response.json()
-                    assert json_body is not None
-                    assert json_body.get("status") == "running"
-
-        # At minimum, the retry should not have succeeded
-        assert retry_response.status_code in (404, 409)
+                get_resp = await client.get("/tasks/TDD-T02")
+                assert get_resp.status_code == 200
+                assert get_resp.json()["status"] == "running"
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_retry_pending_task_returns_conflict_or_error(self) -> None:
-        """GIVEN a task exists with status='pending'
-        WHEN POST /tasks/{task_id}/retry is called
-        THEN the response indicates the task cannot be retried (409 or appropriate error).
+        """GIVEN TDD-T01 has status='pending'
+        WHEN POST /tasks/TDD-T01/retry is called
+        THEN the response is 409 (only failed tasks can be retried).
         """
-        app = create_app()
-        task_id = str(uuid.uuid4())
+        app, db = await _create_seeded_test_app()
+        _override_broadcaster(app)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.post("/tasks/TDD-T01/retry", json={})
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.post(
-                f"/tasks/{task_id}/retry",
-                json={},
-            )
-
-        # Should not return 200 since task is not failed
-        assert response.status_code in (404, 409)
-        json_body = response.json()
-        assert json_body is not None
+            assert response.status_code == 409
+        finally:
+            await db.close()

@@ -30,23 +30,26 @@ class TestCrossRouteConsistency:
         WHEN a sequence of cross-route operations is performed
         THEN all responses are 200.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            # GET /tasks to find a task
-            tasks_response = await client.get("/tasks")
-            assert tasks_response.status_code == 200
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                # GET /tasks to find a task
+                tasks_response = await client.get("/tasks")
+                assert tasks_response.status_code == 200
 
-            # GET /workers to find workers
-            workers_response = await client.get("/workers")
-            assert workers_response.status_code == 200
+                # GET /workers to find workers
+                workers_response = await client.get("/workers")
+                assert workers_response.status_code == 200
 
-            # GET /metrics for aggregate counts
-            metrics_response = await client.get("/metrics")
-            assert metrics_response.status_code == 200
+                # GET /metrics for aggregate counts
+                metrics_response = await client.get("/metrics")
+                assert metrics_response.status_code == 200
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_foreign_key_references_are_consistent_across_endpoints(

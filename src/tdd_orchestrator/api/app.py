@@ -47,6 +47,8 @@ async def init_dependencies(app: FastAPI | None = None) -> None:
     Args:
         app: The FastAPI application instance (optional).
     """
+    import os
+
     global _broadcaster, _registered_callback
 
     # Import the actual init function from dependencies module
@@ -59,9 +61,12 @@ async def init_dependencies(app: FastAPI | None = None) -> None:
 
     _broadcaster = SSEBroadcaster()
 
-    # For now, we'll create placeholder instances
-    # In production, these would be real OrchestratorDB and SSEBroadcaster instances
-    db_instance: Any = None
+    # Connect to the database
+    from tdd_orchestrator.database.core import OrchestratorDB
+
+    db_path = os.environ.get("TDD_ORCHESTRATOR_DB_PATH", "orchestrator.db")
+    db_instance: Any = OrchestratorDB(db_path)
+    await db_instance.connect()
 
     # Call the synchronous init function with the broadcaster
     sync_init_dependencies(db_instance, _broadcaster)
@@ -111,6 +116,12 @@ async def shutdown_dependencies(app: FastAPI | None = None) -> None:
                 if inspect.iscoroutine(result):
                     await result
         _broadcaster = None
+
+    # Close the database connection
+    from tdd_orchestrator.api.dependencies import _db_instance
+
+    if _db_instance is not None and hasattr(_db_instance, "close"):
+        await _db_instance.close()
 
     # Import the actual shutdown function from dependencies module
     from tdd_orchestrator.api.dependencies import (
