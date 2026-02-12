@@ -249,7 +249,8 @@ INSERT OR IGNORE INTO config (key, value, description) VALUES
     ('max_invocations_per_session', '100', 'Budget limit for API invocations per session'),
     ('budget_warning_threshold', '80', 'Percentage of budget that triggers warning'),
     ('heartbeat_interval_seconds', '30', 'Worker heartbeat interval'),
-    ('claim_timeout_seconds', '300', 'Task claim expiration timeout');
+    ('claim_timeout_seconds', '300', 'Task claim expiration timeout'),
+    ('verify_timeout_seconds', '60', 'Timeout in seconds for each pytest/ruff/mypy subprocess');
 
 
 -- =============================================================================

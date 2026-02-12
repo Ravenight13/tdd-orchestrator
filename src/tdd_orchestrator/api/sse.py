@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Awaitable
 from dataclasses import dataclass
 from typing import Any, Coroutine, overload
 
@@ -91,6 +91,9 @@ class _SSESubscription:
 class SSEBroadcaster:
     """Thread-safe SSE broadcaster with graceful shutdown support."""
 
+    # Type alias for callback subscribers
+    _CallbackSubscriber = Callable[[dict[str, Any]], Awaitable[None]]
+
     def __init__(self, heartbeat_interval: float | None = None) -> None:
         """Initialize the SSE broadcaster.
 
@@ -100,6 +103,7 @@ class SSEBroadcaster:
         """
         self._subscribers: set[asyncio.Queue[SSEEvent | None]] = set()
         self._subscribers_generic: set[asyncio.Queue[Any]] = set()
+        self._callback_subscribers: set[Callable[[dict[str, Any]], Awaitable[None]]] = set()
         self._lock: asyncio.Lock = asyncio.Lock()
         self._shutdown: bool = False
         self._heartbeat_interval: float | None = heartbeat_interval
@@ -112,7 +116,7 @@ class SSEBroadcaster:
     @property
     def subscriber_count(self) -> int:
         """Return the total number of active subscribers."""
-        return len(self._subscribers) + len(self._subscribers_generic)
+        return len(self._subscribers) + len(self._subscribers_generic) + len(self._callback_subscribers)
 
     @property
     def subscribers(self) -> set[asyncio.Queue[SSEEvent]]:
@@ -130,75 +134,127 @@ class SSEBroadcaster:
     @overload
     def subscribe(self, queue: asyncio.Queue[SSEEvent]) -> asyncio.Queue[SSEEvent]: ...
 
+    @overload
     def subscribe(
-        self, queue: asyncio.Queue[SSEEvent] | None = None
-    ) -> _SSESubscription | asyncio.Queue[SSEEvent]:
-        """Subscribe a new client with optional queue parameter.
+        self, subscriber: Callable[[dict[str, Any]], Awaitable[None]]
+    ) -> Coroutine[Any, Any, None]: ...
+
+    def subscribe(
+        self,
+        queue_or_subscriber: asyncio.Queue[SSEEvent]
+        | Callable[[dict[str, Any]], Awaitable[None]]
+        | None = None,
+    ) -> (
+        _SSESubscription
+        | asyncio.Queue[SSEEvent]
+        | Coroutine[Any, Any, None]
+    ):
+        """Subscribe a new client with optional queue or callback parameter.
 
         When called without arguments: creates and returns a new async iterator subscription.
         When called with a queue: synchronously adds the queue to subscribers.
+        When called with a callback: returns a coroutine that adds the callback to subscribers.
 
         Args:
-            queue: Optional queue to subscribe. If provided, it's added to subscribers.
+            queue_or_subscriber: Optional queue or callback to subscribe.
 
         Returns:
-            If no queue: new _SSESubscription async iterator.
+            If no argument: new _SSESubscription async iterator.
             If queue provided: the same queue that was added.
+            If callback provided: coroutine that must be awaited.
         """
-        if queue is not None:
-            # Add provided queue to SSEEvent subscribers (sync path)
-            self._subscribers.add(queue)  # type: ignore[arg-type]
-            return queue
-        else:
+        if queue_or_subscriber is None:
             # New behavior: create queue and return async iterator wrapper
             new_queue: asyncio.Queue[SSEEvent | None] = asyncio.Queue()
             self._subscribers.add(new_queue)
             return _SSESubscription(new_queue, self)
+        elif callable(queue_or_subscriber):
+            # Callback subscriber - return coroutine
+            return self._subscribe_callback(queue_or_subscriber)
+        else:
+            # Add provided queue to SSEEvent subscribers (sync path)
+            self._subscribers.add(queue_or_subscriber)  # type: ignore[arg-type]
+            return queue_or_subscriber
 
-    async def unsubscribe(self, subscription: _SSESubscription | asyncio.Queue[SSEEvent]) -> None:
-        """Unsubscribe a client by removing their subscription or queue.
+    async def _subscribe_callback(
+        self, callback: Callable[[dict[str, Any]], Awaitable[None]]
+    ) -> None:
+        """Add a callback subscriber.
 
         Args:
-            subscription: The subscription or queue to remove from subscribers.
+            callback: Async callback function to receive events.
+        """
+        self._callback_subscribers.add(callback)
+
+    async def unsubscribe(
+        self,
+        subscription: _SSESubscription
+        | asyncio.Queue[SSEEvent]
+        | Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        """Unsubscribe a client by removing their subscription, queue, or callback.
+
+        Args:
+            subscription: The subscription, queue, or callback to remove from subscribers.
         """
         if isinstance(subscription, _SSESubscription):
             # Extract the queue from the subscription
             queue = subscription.queue
             self._subscribers.discard(queue)
+        elif callable(subscription):
+            # Remove callback subscriber
+            self._callback_subscribers.discard(subscription)
         else:
             # Handle raw queue (legacy path)
             self._subscribers_generic.discard(subscription)
 
     @overload
-    def publish(self, event: dict[str, Any]) -> None: ...
+    def publish(self, event: dict[str, Any]) -> Coroutine[Any, Any, None]: ...
 
     @overload
     def publish(self, event: SSEEvent) -> Coroutine[Any, Any, None]: ...
 
-    def publish(self, event: SSEEvent | dict[str, Any]) -> None | Coroutine[Any, Any, None]:
+    def publish(self, event: SSEEvent | dict[str, Any]) -> Coroutine[Any, Any, None]:
         """Publish an event to all subscribers.
 
-        For dict events: returns None (synchronous).
-        For SSEEvent: returns coroutine that must be awaited.
+        For both dict and SSEEvent: returns coroutine that must be awaited.
 
         Args:
             event: The event to broadcast (SSEEvent or dict).
 
         Returns:
-            None for dict events, Coroutine for SSEEvent.
+            Coroutine that broadcasts the event.
         """
         if isinstance(event, dict):
-            # Synchronous path for dict events (legacy)
-            for queue in list(self._subscribers_generic):
-                try:
-                    queue.put_nowait(event)
-                except asyncio.QueueFull:
-                    # Silently drop if queue is full
-                    pass
-            return None
+            # Async path for dict events (calls callback subscribers)
+            return self._publish_dict_event(event)
         else:
             # Return coroutine for SSEEvent
             return self._publish_sse_event(event)
+
+    async def _publish_dict_event(self, event: dict[str, Any]) -> None:
+        """Async implementation of dict event publishing.
+
+        Broadcasts to both queue subscribers and callback subscribers.
+
+        Args:
+            event: The dict event to broadcast.
+        """
+        # Publish to generic queue subscribers
+        for queue in list(self._subscribers_generic):
+            try:
+                queue.put_nowait(event)
+            except asyncio.QueueFull:
+                # Silently drop if queue is full
+                pass
+
+        # Publish to callback subscribers
+        for callback in list(self._callback_subscribers):
+            try:
+                await callback(event)
+            except Exception:
+                # Silently ignore callback errors (fire-and-forget)
+                pass
 
     async def _publish_sse_event(self, event: SSEEvent) -> None:
         """Async implementation of SSEEvent publishing.

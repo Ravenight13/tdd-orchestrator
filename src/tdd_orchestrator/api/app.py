@@ -54,18 +54,17 @@ async def init_dependencies(app: FastAPI | None = None) -> None:
         init_dependencies as sync_init_dependencies,
     )
 
-    # For now, we'll create placeholder instances
-    # In production, these would be real OrchestratorDB and SSEBroadcaster instances
-    db_instance: Any = None
-    broadcaster_instance: Any = None
-
-    # Call the synchronous init function
-    sync_init_dependencies(db_instance, broadcaster_instance)
-
     # Create SSE broadcaster
     from tdd_orchestrator.api.sse import SSEBroadcaster
 
     _broadcaster = SSEBroadcaster()
+
+    # For now, we'll create placeholder instances
+    # In production, these would be real OrchestratorDB and SSEBroadcaster instances
+    db_instance: Any = None
+
+    # Call the synchronous init function with the broadcaster
+    sync_init_dependencies(db_instance, _broadcaster)
 
     # Create and register callback with DB observer
     _registered_callback = _create_task_status_callback()
@@ -216,7 +215,7 @@ def _register_routes(app: FastAPI) -> None:
     Args:
         app: The FastAPI application instance.
     """
-
+    # Register the basic /health endpoint
     @app.get("/health")
     async def health() -> HealthResponse:
         """Health check endpoint.
@@ -225,6 +224,11 @@ def _register_routes(app: FastAPI) -> None:
             A HealthResponse with status "ok".
         """
         return HealthResponse(status="ok")
+
+    # Import and register all routes from the routes module
+    from tdd_orchestrator.api.routes import register_routes
+
+    register_routes(app)
 
 
 def _configure_cors(app: FastAPI) -> None:

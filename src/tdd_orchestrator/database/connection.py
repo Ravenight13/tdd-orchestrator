@@ -23,6 +23,7 @@ CONFIG_BOUNDS: dict[str, tuple[int, int]] = {
     "max_green_attempts": (1, 10),
     "green_retry_delay_ms": (0, 10000),
     "max_green_retry_time_seconds": (60, 7200),  # 1 min to 2 hours
+    "verify_timeout_seconds": (10, 600),  # 10s min, 10min max
 }
 
 # Default database path

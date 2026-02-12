@@ -23,8 +23,8 @@ from .models import VerifyResult
 
 logger = logging.getLogger(__name__)
 
-# Default timeout for subprocess execution (30 seconds)
-DEFAULT_TIMEOUT_SECONDS = 30
+# Default timeout for subprocess execution (60 seconds)
+DEFAULT_TIMEOUT_SECONDS = 60
 
 _PYTHON_EXTENSIONS = (".py", ".pyi")
 

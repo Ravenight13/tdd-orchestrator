@@ -82,8 +82,11 @@ class Worker:
     async def start(self) -> None:
         """Register worker and start heartbeat."""
         await self.db.register_worker(self.worker_id)
+        # Load verify timeout from config (overrides code default)
+        verify_timeout = await self.db.get_config_int("verify_timeout_seconds", 60)
+        self.verifier = CodeVerifier(self.base_dir, timeout=verify_timeout)
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-        logger.info("Worker %d started", self.worker_id)
+        logger.info("Worker %d started (verify_timeout=%ds)", self.worker_id, verify_timeout)
 
     async def stop(self) -> None:
         """Stop worker and cleanup."""

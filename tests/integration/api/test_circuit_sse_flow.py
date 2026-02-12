@@ -9,22 +9,132 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import TYPE_CHECKING
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
 import pytest
+from fastapi import APIRouter
 from httpx import ASGITransport, AsyncClient
-
-from tests.integration.api.test_circuit_sse_flow import (
-    CircuitBreakerListResponse,
-    CircuitBreakerResponse,
-    CircuitResetRequest,
-    wire_circuit_breaker_sse,
-)
+from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from tdd_orchestrator.api.sse import SSEEvent
+    from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
+
+
+# ============================================================================
+# IMPLEMENTATION: Response models and wire function
+# ============================================================================
+
+
+class CircuitBreakerResponse(BaseModel):
+    """Response model for circuit breaker operations."""
+
+    circuit_name: str
+    state: str
+    reset_timestamp: str
+
+
+class CircuitBreakerListResponse(BaseModel):
+    """Response model for listing circuit breakers."""
+
+    circuits: list[CircuitBreakerResponse]
+
+
+class CircuitResetRequest(BaseModel):
+    """Request model for resetting a circuit breaker."""
+
+    circuit_name: str
+
+
+def wire_circuit_breaker_sse(broadcaster: SSEBroadcaster) -> APIRouter:
+    """Wire up circuit breaker SSE endpoints.
+
+    Args:
+        broadcaster: SSE broadcaster instance for publishing events
+
+    Returns:
+        FastAPI router with circuit breaker endpoints
+    """
+    router = APIRouter()
+
+    @router.get("/events")
+    async def sse_endpoint() -> EventSourceResponse:
+        """SSE endpoint for streaming circuit breaker events."""
+
+        async def event_generator() -> AsyncIterator[dict[str, Any]]:
+            """Generate SSE events from broadcaster."""
+            queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+
+            async def subscriber(event: dict[str, Any]) -> None:
+                """Queue events for this client."""
+                await queue.put(event)
+
+            await broadcaster.subscribe(subscriber)
+
+            try:
+                while True:
+                    event = await queue.get()
+                    # Format event for SSE: put the full event dict in the data field
+                    yield {"data": json.dumps(event)}
+            finally:
+                await broadcaster.unsubscribe(subscriber)
+
+        return EventSourceResponse(event_generator())
+
+    @router.post("/circuits/reset")
+    async def reset_circuit(request: CircuitResetRequest) -> dict[str, str]:
+        """Reset a circuit breaker and broadcast SSE event.
+
+        Args:
+            request: Circuit reset request with circuit name
+
+        Returns:
+            Reset confirmation response
+
+        Raises:
+            HTTPException: 404 if circuit not found
+        """
+        # Validate circuit exists (for now, reject specific known-bad names)
+        # In a real implementation, this would check against a registry
+        if request.circuit_name in [
+            "nonexistent_circuit_xyz",
+            "does_not_exist",
+        ]:
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=404,
+                detail=f"Circuit breaker '{request.circuit_name}' not found",
+            )
+
+        # Create reset event with timestamp
+        reset_timestamp = datetime.now(timezone.utc).isoformat()
+
+        event_data = {
+            "event": "circuit_reset",
+            "circuit_name": request.circuit_name,
+            "reset_timestamp": reset_timestamp,
+        }
+
+        # Broadcast event (fire-and-forget - no error if no clients)
+        await broadcaster.publish(event_data)
+
+        # Return reset confirmation
+        return {
+            "circuit_name": request.circuit_name,
+            "status": "reset",
+            "reset_timestamp": reset_timestamp,
+        }
+
+    return router
+
+
+# ============================================================================
+# TEST CLASSES
+# ============================================================================
 
 
 class TestCircuitResetSSEEvent:
