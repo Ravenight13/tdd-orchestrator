@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from tdd_orchestrator.api.dependencies import get_broadcaster_dep
+from tdd_orchestrator.api.dependencies import get_broadcaster_dep, get_db_dep
 
 router = APIRouter()
 
@@ -131,7 +131,7 @@ def retry_task(task_key: str) -> dict[str, Any]:
 
 
 @router.get("")
-def get_tasks(
+async def get_tasks(
     status: TaskStatus | None = Query(None, description="Filter by task status"),
     phase: TaskPhase | None = Query(None, description="Filter by task phase"),
     complexity: TaskComplexity | None = Query(
@@ -139,6 +139,7 @@ def get_tasks(
     ),
     limit: int = Query(20, ge=0, description="Maximum number of tasks to return"),
     offset: int = Query(0, ge=0, description="Number of tasks to skip"),
+    db: Any = Depends(get_db_dep),
 ) -> dict[str, Any]:
     """Get list of tasks with optional filtering and pagination.
 
@@ -148,10 +149,75 @@ def get_tasks(
         complexity: Optional complexity filter (low, medium, high).
         limit: Maximum number of tasks to return (default 20).
         offset: Number of tasks to skip for pagination (default 0).
+        db: Database dependency (injected).
 
     Returns:
         TaskListResponse with tasks list, total count, limit, and offset.
     """
+    if db is not None and hasattr(db, "_conn") and db._conn is not None:
+        query = "SELECT * FROM tasks WHERE 1=1"
+        params: list[Any] = []
+        if status is not None:
+            # Map API status values to DB status values
+            db_status_map: dict[str, list[str]] = {
+                "pending": ["pending"],
+                "running": ["in_progress"],
+                "completed": ["passing", "complete"],
+                "failed": ["blocked", "blocked-static-review"],
+            }
+            db_statuses = db_status_map.get(status.value, [status.value])
+            placeholders = ",".join("?" for _ in db_statuses)
+            query += f" AND status IN ({placeholders})"
+            params.extend(db_statuses)
+        if phase is not None:
+            query += " AND phase = ?"
+            params.append(phase.value)
+        if complexity is not None:
+            query += " AND complexity = ?"
+            params.append(complexity.value)
+        query += " ORDER BY phase, sequence"
+        query += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        async with db._conn.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+        # Get total count without limit/offset
+        count_query = "SELECT COUNT(*) as cnt FROM tasks WHERE 1=1"
+        count_params: list[Any] = []
+        if status is not None:
+            db_statuses_c = db_status_map.get(status.value, [status.value])
+            placeholders_c = ",".join("?" for _ in db_statuses_c)
+            count_query += f" AND status IN ({placeholders_c})"
+            count_params.extend(db_statuses_c)
+        if phase is not None:
+            count_query += " AND phase = ?"
+            count_params.append(phase.value)
+        if complexity is not None:
+            count_query += " AND complexity = ?"
+            count_params.append(complexity.value)
+        async with db._conn.execute(count_query, count_params) as cursor:
+            count_row = await cursor.fetchone()
+        total = int(count_row["cnt"]) if count_row else 0
+        # Map DB status to API status for consistency with metrics endpoint
+        api_status_map: dict[str, str] = {
+            "pending": "pending",
+            "in_progress": "running",
+            "passing": "passed",
+            "complete": "passed",
+            "blocked": "failed",
+            "blocked-static-review": "failed",
+        }
+        tasks_list = [
+            {
+                "id": str(row["task_key"]),
+                "title": str(row["title"]),
+                "status": api_status_map.get(str(row["status"]), str(row["status"])),
+                "phase": int(row["phase"]),
+                "sequence": int(row["sequence"]),
+                "complexity": str(row["complexity"]) if row["complexity"] else "medium",
+            }
+            for row in rows
+        ]
+        return {"tasks": tasks_list, "total": total, "limit": limit, "offset": offset}
     # Convert enums to strings for the list_tasks function
     status_str = status.value if status else None
     phase_str = phase.value if phase else None

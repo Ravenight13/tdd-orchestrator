@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import AsyncGenerator
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -124,6 +125,42 @@ def _create_test_app() -> FastAPI:
     return app
 
 
+async def _create_seeded_test_app() -> tuple[FastAPI, Any]:
+    """Create a test app with a seeded in-memory database.
+
+    Seeds workers, tasks with varying statuses, and an execution run
+    so integration tests can exercise DB-backed route handlers.
+
+    Returns:
+        Tuple of (app, db) where db must be closed by the caller.
+    """
+    from tdd_orchestrator.api.dependencies import get_db_dep
+    from tdd_orchestrator.database.core import OrchestratorDB
+
+    db = OrchestratorDB(":memory:")
+    await db.connect()
+
+    await db.register_worker(1)
+    await db.register_worker(2)
+
+    await db.create_task("TDD-T01", "Test Task 1", phase=0, sequence=0)
+    await db.create_task("TDD-T02", "Test Task 2", phase=0, sequence=1)
+    await db.create_task("TDD-T03", "Test Task 3", phase=0, sequence=2)
+    await db.update_task_status("TDD-T02", "in_progress")
+    await db.update_task_status("TDD-T03", "complete")
+
+    await db.start_execution_run(max_workers=2)
+
+    app = _create_test_app()
+
+    async def override_get_db() -> AsyncGenerator[Any, None]:
+        yield db
+
+    app.dependency_overrides[get_db_dep] = override_get_db
+
+    return app, db
+
+
 # =============================================================================
 # Test Classes
 # =============================================================================
@@ -164,29 +201,32 @@ class TestWorkersEndpoint:
         WHEN GET /workers is called
         THEN each WorkerResponse contains id, status, and registered_at fields.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get("/workers")
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/workers")
 
-        assert response.status_code == 200
-        json_body = response.json()
-        assert json_body is not None
-        # Accept either format from the API
-        workers = json_body.get("workers", json_body.get("items", []))
-        assert isinstance(workers, list)
+            assert response.status_code == 200
+            json_body = response.json()
+            assert json_body is not None
+            # Accept either format from the API
+            workers = json_body.get("workers", json_body.get("items", []))
+            assert isinstance(workers, list)
 
-        # Skip if no workers (empty database is valid for this endpoint)
-        if len(workers) == 0:
-            pytest.skip("No workers in database - expected for empty test run")
+            # Skip if no workers (empty database is valid for this endpoint)
+            if len(workers) == 0:
+                pytest.skip("No workers in database - expected for empty test run")
 
-        for worker in workers:
-            assert "id" in worker, "Worker missing 'id' field"
-            assert "status" in worker, "Worker missing 'status' field"
-            assert "registered_at" in worker, "Worker missing 'registered_at' field"
+            for worker in workers:
+                assert "id" in worker, "Worker missing 'id' field"
+                assert "status" in worker, "Worker missing 'status' field"
+                assert "registered_at" in worker, "Worker missing 'registered_at' field"
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_workers_returns_empty_list_when_no_workers_exist(self) -> None:
@@ -219,29 +259,32 @@ class TestRunsEndpoint:
         WHEN GET /runs/{run_id} is called
         THEN response is 200 with a RunDetailResponse.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        # Use a known run_id from seeded data
-        run_id = "test-run-001"
+        # Use integer run_id matching seeded autoincrement ID
+        run_id = "1"
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get(f"/runs/{run_id}")
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get(f"/runs/{run_id}")
 
-        # 404 is acceptable if no seeded data exists
-        if response.status_code == 404:
-            pytest.skip("No seeded run data - test requires database seeding")
+            # 404 is acceptable if no seeded data exists
+            if response.status_code == 404:
+                pytest.skip("No seeded run data - test requires database seeding")
 
-        assert response.status_code == 200
-        json_body = response.json()
-        assert json_body is not None
-        assert "task_id" in json_body
-        assert "status" in json_body
-        assert "started_at" in json_body
-        # 'log' field may or may not be present depending on implementation
-        # assert "log" in json_body
+            assert response.status_code == 200
+            json_body = response.json()
+            assert json_body is not None
+            assert "task_id" in json_body
+            assert "status" in json_body
+            assert "started_at" in json_body
+            # 'log' field may or may not be present depending on implementation
+            # assert "log" in json_body
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_run_detail_returns_404_when_run_not_found(self) -> None:
@@ -270,28 +313,31 @@ class TestRunsEndpoint:
         WHEN GET /runs/{run_id} is called
         THEN RunDetailResponse contains task_id, status, started_at, and log fields.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        run_id = "test-run-001"
+        run_id = "1"
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get(f"/runs/{run_id}")
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get(f"/runs/{run_id}")
 
-        # 404 is acceptable if no seeded data exists
-        if response.status_code == 404:
-            pytest.skip("No seeded run data - test requires database seeding")
+            # 404 is acceptable if no seeded data exists
+            if response.status_code == 404:
+                pytest.skip("No seeded run data - test requires database seeding")
 
-        assert response.status_code == 200
-        json_body = response.json()
-        assert json_body is not None
-        assert "task_id" in json_body, "RunDetailResponse missing 'task_id'"
-        assert "status" in json_body, "RunDetailResponse missing 'status'"
-        assert "started_at" in json_body, "RunDetailResponse missing 'started_at'"
-        # 'log' field may or may not be present depending on implementation
-        # assert "log" in json_body, "RunDetailResponse missing 'log'"
+            assert response.status_code == 200
+            json_body = response.json()
+            assert json_body is not None
+            assert "task_id" in json_body, "RunDetailResponse missing 'task_id'"
+            assert "status" in json_body, "RunDetailResponse missing 'status'"
+            assert "started_at" in json_body, "RunDetailResponse missing 'started_at'"
+            # 'log' field may or may not be present depending on implementation
+            # assert "log" in json_body, "RunDetailResponse missing 'log'"
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_runs_list_filtered_by_task_id(self) -> None:
@@ -330,103 +376,103 @@ class TestMetricsEndpoint:
     @pytest.mark.asyncio
     async def test_metrics_returns_200_with_counts_per_status(self) -> None:
         """GIVEN tasks with various statuses (pending, running, passed, failed) exist in the seeded database
-        WHEN GET /metrics is called
+        WHEN GET /metrics/json is called
         THEN response is 200 with a MetricsResponse containing counts per status.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get("/metrics")
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/metrics/json")
 
-        # Metrics endpoint returns Prometheus format, not JSON
-        # Accept either 200 with text or implementation that returns JSON
-        assert response.status_code == 200
+            assert response.status_code == 200
 
-        # If it's Prometheus format, skip JSON validation
-        content_type = response.headers.get("content-type", "")
-        if "text/plain" in content_type:
-            pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
+            # If it's Prometheus format, skip JSON validation
+            content_type = response.headers.get("content-type", "")
+            if "text/plain" in content_type:
+                pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
 
-        # If JSON, validate structure
-        json_body = response.json()
-        assert json_body is not None
-        # These fields may not exist in current implementation
-        # assert "pending_count" in json_body
-        # assert "running_count" in json_body
-        # assert "passed_count" in json_body
-        # assert "failed_count" in json_body
-        # assert "total_count" in json_body
+            json_body = response.json()
+            assert json_body is not None
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_metrics_counts_sum_to_total(self) -> None:
         """GIVEN tasks exist in the seeded database
-        WHEN GET /metrics is called
+        WHEN GET /metrics/json is called
         THEN the counts per status sum to the total number of seeded tasks.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get("/metrics")
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/metrics/json")
 
-        assert response.status_code == 200
+            assert response.status_code == 200
 
-        # If it's Prometheus format, skip JSON validation
-        content_type = response.headers.get("content-type", "")
-        if "text/plain" in content_type:
-            pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
+            # If it's Prometheus format, skip JSON validation
+            content_type = response.headers.get("content-type", "")
+            if "text/plain" in content_type:
+                pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
 
-        json_body = response.json()
-        assert json_body is not None
+            json_body = response.json()
+            assert json_body is not None
 
-        pending = json_body.get("pending_count", 0)
-        running = json_body.get("running_count", 0)
-        passed = json_body.get("passed_count", 0)
-        failed = json_body.get("failed_count", 0)
-        total = json_body.get("total_count", 0)
+            pending = json_body.get("pending_count", 0)
+            running = json_body.get("running_count", 0)
+            passed = json_body.get("passed_count", 0)
+            failed = json_body.get("failed_count", 0)
+            total = json_body.get("total_count", 0)
 
-        assert isinstance(pending, int)
-        assert isinstance(running, int)
-        assert isinstance(passed, int)
-        assert isinstance(failed, int)
-        assert isinstance(total, int)
+            assert isinstance(pending, int)
+            assert isinstance(running, int)
+            assert isinstance(passed, int)
+            assert isinstance(failed, int)
+            assert isinstance(total, int)
 
-        calculated_total = pending + running + passed + failed
-        assert calculated_total == total, (
-            f"Counts don't sum to total: {pending} + {running} + {passed} + {failed} = "
-            f"{calculated_total}, expected {total}"
-        )
+            calculated_total = pending + running + passed + failed
+            assert calculated_total == total, (
+                f"Counts don't sum to total: {pending} + {running} + {passed} + {failed} = "
+                f"{calculated_total}, expected {total}"
+            )
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_metrics_includes_timing_statistics(self) -> None:
         """GIVEN tasks exist in the seeded database
-        WHEN GET /metrics is called
+        WHEN GET /metrics/json is called
         THEN MetricsResponse includes timing/duration statistics.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            response = await client.get("/metrics")
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                response = await client.get("/metrics/json")
 
-        assert response.status_code == 200
+            assert response.status_code == 200
 
-        # If it's Prometheus format, skip JSON validation
-        content_type = response.headers.get("content-type", "")
-        if "text/plain" in content_type:
-            pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
+            # If it's Prometheus format, skip JSON validation
+            content_type = response.headers.get("content-type", "")
+            if "text/plain" in content_type:
+                pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
 
-        json_body = response.json()
-        assert json_body is not None
-        # avg_duration_seconds may be None if no completed tasks
-        # assert "avg_duration_seconds" in json_body
+            json_body = response.json()
+            assert json_body is not None
+            # avg_duration_seconds may be None if no completed tasks
+            # assert "avg_duration_seconds" in json_body
+        finally:
+            await db.close()
 
 
 class TestFullRegressionSuite:
@@ -563,61 +609,64 @@ class TestCrossRouteConsistency:
         WHEN fetching tasks, runs, and workers
         THEN foreign-key references are consistent (run.task_id matches task.id, run.worker_id matches worker.id).
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            # Get tasks
-            tasks_response = await client.get("/tasks")
-            assert tasks_response.status_code == 200
-            tasks_body = tasks_response.json()
-            assert tasks_body is not None
-            tasks = tasks_body.get("tasks", [])
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                # Get tasks
+                tasks_response = await client.get("/tasks")
+                assert tasks_response.status_code == 200
+                tasks_body = tasks_response.json()
+                assert tasks_body is not None
+                tasks = tasks_body.get("tasks", [])
 
-            if len(tasks) == 0:
-                pytest.skip("No tasks in seeded database")
+                if len(tasks) == 0:
+                    pytest.skip("No tasks in seeded database")
 
-            task_ids = {task.get("id") for task in tasks if task.get("id") is not None}
+                task_ids = {task.get("id") for task in tasks if task.get("id") is not None}
 
-            # Get workers
-            workers_response = await client.get("/workers")
-            assert workers_response.status_code == 200
-            workers_body = workers_response.json()
-            assert workers_body is not None
-            # Accept either format
-            workers = workers_body.get("workers", workers_body.get("items", []))
-            worker_ids = {w.get("id") for w in workers if w.get("id") is not None}
+                # Get workers
+                workers_response = await client.get("/workers")
+                assert workers_response.status_code == 200
+                workers_body = workers_response.json()
+                assert workers_body is not None
+                # Accept either format
+                workers = workers_body.get("workers", workers_body.get("items", []))
+                worker_ids = {w.get("id") for w in workers if w.get("id") is not None}
 
-            # Get runs for first task (if task_id query param is supported)
-            first_task_id = tasks[0].get("id")
-            if first_task_id is not None:
-                runs_response = await client.get(f"/runs?task_id={first_task_id}")
+                # Get runs for first task (if task_id query param is supported)
+                first_task_id = tasks[0].get("id")
+                if first_task_id is not None:
+                    runs_response = await client.get(f"/runs?task_id={first_task_id}")
 
-                # Skip if query param not supported
-                if runs_response.status_code == 422:
-                    pytest.skip("task_id query parameter not yet implemented")
+                    # Skip if query param not supported
+                    if runs_response.status_code == 422:
+                        pytest.skip("task_id query parameter not yet implemented")
 
-                assert runs_response.status_code == 200
-                runs_body = runs_response.json()
-                assert runs_body is not None
-                runs = runs_body.get("runs", [])
+                    assert runs_response.status_code == 200
+                    runs_body = runs_response.json()
+                    assert runs_body is not None
+                    runs = runs_body.get("runs", [])
 
-                for run in runs:
-                    # Verify run.task_id matches a known task.id
-                    run_task_id = run.get("task_id")
-                    if run_task_id is not None:
-                        assert run_task_id in task_ids, (
-                            f"run.task_id '{run_task_id}' not found in tasks"
-                        )
+                    for run in runs:
+                        # Verify run.task_id matches a known task.id
+                        run_task_id = run.get("task_id")
+                        if run_task_id is not None:
+                            assert run_task_id in task_ids, (
+                                f"run.task_id '{run_task_id}' not found in tasks"
+                            )
 
-                    # Verify run.worker_id matches a known worker.id (if set)
-                    run_worker_id = run.get("worker_id")
-                    if run_worker_id is not None and len(worker_ids) > 0:
-                        assert run_worker_id in worker_ids, (
-                            f"run.worker_id '{run_worker_id}' not found in workers"
-                        )
+                        # Verify run.worker_id matches a known worker.id (if set)
+                        run_worker_id = run.get("worker_id")
+                        if run_worker_id is not None and len(worker_ids) > 0:
+                            assert run_worker_id in worker_ids, (
+                                f"run.worker_id '{run_worker_id}' not found in workers"
+                            )
+        finally:
+            await db.close()
 
     @pytest.mark.asyncio
     async def test_metrics_counts_reflect_actual_data(self) -> None:
@@ -625,54 +674,57 @@ class TestCrossRouteConsistency:
         WHEN fetching tasks and metrics
         THEN metrics counts reflect the actual data returned by the list endpoints.
         """
-        app = _create_test_app()
+        app, db = await _create_seeded_test_app()
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app),
-            base_url="http://test",
-        ) as client:
-            # Get tasks
-            tasks_response = await client.get("/tasks")
-            assert tasks_response.status_code == 200
-            tasks_body = tasks_response.json()
-            assert tasks_body is not None
-            tasks = tasks_body.get("tasks", [])
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                # Get tasks
+                tasks_response = await client.get("/tasks")
+                assert tasks_response.status_code == 200
+                tasks_body = tasks_response.json()
+                assert tasks_body is not None
+                tasks = tasks_body.get("tasks", [])
 
-            # Get metrics
-            metrics_response = await client.get("/metrics")
-            assert metrics_response.status_code == 200
+                # Get metrics
+                metrics_response = await client.get("/metrics/json")
+                assert metrics_response.status_code == 200
 
-            # If it's Prometheus format, skip validation
-            content_type = metrics_response.headers.get("content-type", "")
-            if "text/plain" in content_type:
-                pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
+                # If it's Prometheus format, skip validation
+                content_type = metrics_response.headers.get("content-type", "")
+                if "text/plain" in content_type:
+                    pytest.skip("Metrics endpoint returns Prometheus format, not JSON")
 
-            metrics_body = metrics_response.json()
-            assert metrics_body is not None
+                metrics_body = metrics_response.json()
+                assert metrics_body is not None
 
-            # Count tasks by status from tasks list
-            status_counts = {
-                "pending": 0,
-                "running": 0,
-                "passed": 0,
-                "failed": 0,
-            }
-            for task in tasks:
-                status = task.get("status", "").lower()
-                if status in status_counts:
-                    status_counts[status] += 1
+                # Count tasks by status from tasks list
+                status_counts: dict[str, int] = {
+                    "pending": 0,
+                    "running": 0,
+                    "passed": 0,
+                    "failed": 0,
+                }
+                for task in tasks:
+                    status = task.get("status", "").lower()
+                    if status in status_counts:
+                        status_counts[status] += 1
 
-            # Verify metrics match actual counts (if fields exist)
-            if "pending_count" in metrics_body:
-                assert metrics_body.get("pending_count", 0) == status_counts["pending"]
-            if "running_count" in metrics_body:
-                assert metrics_body.get("running_count", 0) == status_counts["running"]
-            if "passed_count" in metrics_body:
-                assert metrics_body.get("passed_count", 0) == status_counts["passed"]
-            if "failed_count" in metrics_body:
-                assert metrics_body.get("failed_count", 0) == status_counts["failed"]
-            if "total_count" in metrics_body:
-                assert metrics_body.get("total_count", 0) == len(tasks)
+                # Verify metrics match actual counts (if fields exist)
+                if "pending_count" in metrics_body:
+                    assert metrics_body.get("pending_count", 0) == status_counts["pending"]
+                if "running_count" in metrics_body:
+                    assert metrics_body.get("running_count", 0) == status_counts["running"]
+                if "passed_count" in metrics_body:
+                    assert metrics_body.get("passed_count", 0) == status_counts["passed"]
+                if "failed_count" in metrics_body:
+                    assert metrics_body.get("failed_count", 0) == status_counts["failed"]
+                if "total_count" in metrics_body:
+                    assert metrics_body.get("total_count", 0) == len(tasks)
+        finally:
+            await db.close()
 
 
 class TestResponseModels:
@@ -844,7 +896,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_metrics_with_no_tasks_returns_zero_counts(self) -> None:
         """GIVEN no tasks exist in the database
-        WHEN GET /metrics is called
+        WHEN GET /metrics/json is called
         THEN response is 200 with zero counts.
         """
         app = _create_test_app()
@@ -853,7 +905,7 @@ class TestEdgeCases:
             transport=ASGITransport(app=app),
             base_url="http://test",
         ) as client:
-            response = await client.get("/metrics")
+            response = await client.get("/metrics/json")
 
         assert response.status_code == 200
 

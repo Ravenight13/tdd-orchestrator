@@ -55,18 +55,17 @@ class TestGetDbDep:
             shutdown_dependencies()
 
     @pytest.mark.asyncio
-    async def test_raises_runtime_error_when_db_uninitialized(self) -> None:
+    async def test_yields_none_when_db_uninitialized(self) -> None:
         """GIVEN the OrchestratorDB singleton has NOT been initialized,
         WHEN get_db_dep() is called,
-        THEN it raises RuntimeError before yielding any value.
+        THEN it yields None (allowing route handlers to fall back to placeholders).
         """
         shutdown_dependencies()
 
         gen = get_db_dep()
-        with pytest.raises(RuntimeError) as exc_info:
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
 
-        assert "database" in str(exc_info.value).lower() or "uninitialized" in str(exc_info.value).lower()
+        assert db_instance is None
 
     @pytest.mark.asyncio
     async def test_is_async_generator_function(self) -> None:
@@ -199,7 +198,7 @@ class TestShutdownDependencies:
     async def test_clears_db_singleton(self) -> None:
         """GIVEN dependencies have been initialized,
         WHEN shutdown_dependencies() is called,
-        THEN get_db_dep() raises RuntimeError.
+        THEN get_db_dep() yields None.
         """
         mock_db = MagicMock()
         mock_broadcaster = MagicMock()
@@ -208,8 +207,8 @@ class TestShutdownDependencies:
         shutdown_dependencies()
 
         gen = get_db_dep()
-        with pytest.raises(RuntimeError):
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
+        assert db_instance is None
 
     def test_is_idempotent(self) -> None:
         """GIVEN dependencies are already shut down,

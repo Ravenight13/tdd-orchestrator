@@ -32,15 +32,15 @@ class TestDependenciesBeforeInit:
         yield
         shutdown_dependencies()
 
-    async def test_get_db_dep_raises_runtime_error_when_never_initialized(self) -> None:
+    async def test_get_db_dep_yields_none_when_never_initialized(self) -> None:
         """GIVEN init_dependencies() has never been called.
 
         WHEN get_db_dep() is consumed as an async generator
-        THEN it raises RuntimeError indicating db is uninitialized.
+        THEN it yields None (allowing route handlers to fall back to placeholders).
         """
         gen = get_db_dep()
-        with pytest.raises(RuntimeError, match="(?i)uninitialized"):
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
+        assert db_instance is None
 
     async def test_get_broadcaster_dep_raises_runtime_error_when_never_initialized(
         self,
@@ -53,15 +53,15 @@ class TestDependenciesBeforeInit:
         with pytest.raises(RuntimeError, match="(?i)uninitialized"):
             get_broadcaster_dep()
 
-    async def test_both_getters_raise_before_init(self) -> None:
+    async def test_both_getters_return_uninitialized_before_init(self) -> None:
         """GIVEN init_dependencies() has never been called.
 
         WHEN both getters are invoked
-        THEN both raise RuntimeError (neither leaks a stale singleton).
+        THEN db yields None and broadcaster raises RuntimeError.
         """
         gen = get_db_dep()
-        with pytest.raises(RuntimeError):
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
+        assert db_instance is None
 
         with pytest.raises(RuntimeError):
             get_broadcaster_dep()
@@ -206,7 +206,7 @@ class TestShutdownDependencies:
         """GIVEN init_dependencies() has been called.
 
         WHEN shutdown_dependencies() is called
-        THEN get_db_dep() raises RuntimeError again.
+        THEN get_db_dep() yields None again.
         """
         mock_db = MagicMock()
         mock_broadcaster = MagicMock()
@@ -215,8 +215,8 @@ class TestShutdownDependencies:
         shutdown_dependencies()
 
         gen = get_db_dep()
-        with pytest.raises(RuntimeError):
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
+        assert db_instance is None
 
     async def test_shutdown_resets_broadcaster_to_uninitialized(self) -> None:
         """GIVEN init_dependencies() has been called.
@@ -243,10 +243,10 @@ class TestShutdownDependencies:
         shutdown_dependencies()
         shutdown_dependencies()
 
-        # State remains uninitialized
+        # State remains uninitialized — yields None
         gen = get_db_dep()
-        with pytest.raises(RuntimeError):
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
+        assert db_instance is None
 
     async def test_repeated_shutdown_after_init_is_idempotent(self) -> None:
         """GIVEN init_dependencies() was called and then shutdown.
@@ -263,8 +263,8 @@ class TestShutdownDependencies:
         shutdown_dependencies()  # third call should be safe
 
         gen = get_db_dep()
-        with pytest.raises(RuntimeError):
-            await gen.__anext__()
+        db_instance = await gen.__anext__()
+        assert db_instance is None
         with pytest.raises(RuntimeError):
             get_broadcaster_dep()
 
@@ -351,8 +351,8 @@ class TestFullLifecycle:
 
             # Verify shutdown worked
             gen_after = get_db_dep()
-            with pytest.raises(RuntimeError):
-                await gen_after.__anext__()
+            db_after = await gen_after.__anext__()
+            assert db_after is None
             with pytest.raises(RuntimeError):
                 get_broadcaster_dep()
 
