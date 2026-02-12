@@ -132,11 +132,11 @@ class SSEBroadcaster:
     def subscribe(self) -> _SSESubscription: ...
 
     @overload
-    def subscribe(self, queue: asyncio.Queue[SSEEvent]) -> asyncio.Queue[SSEEvent]: ...
+    def subscribe(self, queue_or_subscriber: asyncio.Queue[SSEEvent]) -> asyncio.Queue[SSEEvent]: ...
 
     @overload
     def subscribe(
-        self, subscriber: Callable[[dict[str, Any]], Awaitable[None]]
+        self, queue_or_subscriber: Callable[[dict[str, Any]], Awaitable[None]]
     ) -> Coroutine[Any, Any, None]: ...
 
     def subscribe(

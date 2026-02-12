@@ -1,13 +1,10 @@
 """Worker processing tests - TDD pipeline stage execution."""
 
 import subprocess
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 from tdd_orchestrator.database import OrchestratorDB
 from tdd_orchestrator.models import Stage, VerifyResult
 from tdd_orchestrator.worker_pool import Worker, WorkerConfig

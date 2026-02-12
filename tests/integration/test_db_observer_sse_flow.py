@@ -8,14 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
-
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 from tdd_orchestrator.api.sse import SSEBroadcaster, SSEEvent
 from tdd_orchestrator.database import OrchestratorDB

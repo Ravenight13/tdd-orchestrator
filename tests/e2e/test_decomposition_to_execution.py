@@ -9,13 +9,10 @@ database loading to worker execution, bridging the gap between:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 from tdd_orchestrator.decomposition.task_model import DecomposedTask
 from tdd_orchestrator.models import Stage

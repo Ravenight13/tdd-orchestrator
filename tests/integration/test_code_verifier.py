@@ -6,12 +6,7 @@ tools (pytest, ruff, mypy) as async subprocesses and captures their output.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 from tdd_orchestrator.code_verifier import CodeVerifier
 
 

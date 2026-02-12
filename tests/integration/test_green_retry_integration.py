@@ -12,7 +12,6 @@ Test coverage:
 - Git commits only happen on GREEN success
 """
 
-import sys
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,8 +19,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from tdd_orchestrator.ast_checker import ASTCheckResult
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 from tdd_orchestrator.database import OrchestratorDB
 from tdd_orchestrator.models import Stage, StageResult
 from tdd_orchestrator.worker_pool import Worker, WorkerConfig

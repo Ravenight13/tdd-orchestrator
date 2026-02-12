@@ -46,7 +46,7 @@ target-version = "py311"
 python_version = "3.11"
 strict = true
 explicit_package_bases = true
-mypy_path = "$MYPY_CONFIG_FILE_DIR"
+mypy_path = "$MYPY_CONFIG_FILE_DIR/src"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

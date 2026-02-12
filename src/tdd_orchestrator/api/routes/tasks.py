@@ -233,33 +233,68 @@ async def get_tasks(
 
 
 @router.get("/stats")
-def get_stats() -> dict[str, int]:
+async def get_stats(db: Any = Depends(get_db_dep)) -> dict[str, int]:
     """Get aggregate task counts by status.
+
+    Args:
+        db: Database dependency (injected).
 
     Returns:
         Dictionary with counts for each status (pending, running, passed, failed)
         and total count of all tasks.
     """
+    if db is not None and hasattr(db, "_conn") and db._conn is not None:
+        counts: dict[str, int] = {"pending": 0, "running": 0, "passed": 0, "failed": 0}
+        async with db._conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status"
+        ) as cursor:
+            async for row in cursor:
+                db_status = str(row["status"])
+                count = int(row["cnt"])
+                if db_status == "pending":
+                    counts["pending"] += count
+                elif db_status == "in_progress":
+                    counts["running"] += count
+                elif db_status in ("passing", "complete"):
+                    counts["passed"] += count
+                elif db_status in ("blocked", "blocked-static-review"):
+                    counts["failed"] += count
+        total = sum(counts.values())
+        return {
+            "pending": counts["pending"],
+            "running": counts["running"],
+            "passed": counts["passed"],
+            "failed": counts["failed"],
+            "total": total,
+        }
     return get_task_stats()
 
 
 @router.get("/progress")
-def get_progress() -> dict[str, float]:
-    """Get phase-level completion percentages.
+async def get_progress(db: Any = Depends(get_db_dep)) -> dict[str, Any]:
+    """Get task completion progress.
+
+    Args:
+        db: Database dependency (injected).
 
     Returns:
-        Dictionary mapping phase names to completion percentages (0.0 to 100.0).
-        Returns empty dictionary if no tasks exist.
+        Dictionary with total, completed, percentage, and by_status breakdown.
     """
+    if db is not None and hasattr(db, "_conn") and db._conn is not None:
+        progress: dict[str, Any] = await db.get_progress()
+        return progress
     return get_task_progress()
 
 
 @router.get("/{task_key}")
-def get_task_detail_endpoint(task_key: str) -> dict[str, Any]:
+async def get_task_detail_endpoint(
+    task_key: str, db: Any = Depends(get_db_dep)
+) -> dict[str, Any]:
     """Get task detail with full attempt history.
 
     Args:
         task_key: The unique task identifier.
+        db: Database dependency (injected).
 
     Returns:
         TaskDetailResponse with task details and nested AttemptResponse objects.
@@ -267,6 +302,43 @@ def get_task_detail_endpoint(task_key: str) -> dict[str, Any]:
     Raises:
         HTTPException: 404 if task not found.
     """
+    api_status_map: dict[str, str] = {
+        "pending": "pending",
+        "in_progress": "running",
+        "passing": "passed",
+        "complete": "passed",
+        "blocked": "failed",
+        "blocked-static-review": "failed",
+    }
+    if db is not None and hasattr(db, "_conn") and db._conn is not None:
+        task: dict[str, Any] | None = await db.get_task_by_key(task_key)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task_id = int(task["id"])
+        attempts: list[dict[str, Any]] = await db.get_stage_attempts(task_id)
+
+        return {
+            "id": str(task["task_key"]),
+            "title": str(task["title"]),
+            "status": api_status_map.get(str(task["status"]), str(task["status"])),
+            "phase": int(task["phase"]),
+            "sequence": int(task["sequence"]),
+            "complexity": str(task["complexity"]) if task.get("complexity") else "medium",
+            "attempts": [
+                {
+                    "id": int(a["id"]),
+                    "stage": str(a["stage"]),
+                    "attempt_number": int(a["attempt_number"]),
+                    "success": bool(a["success"]),
+                    "error_message": (
+                        str(a["error_message"]) if a.get("error_message") else None
+                    ),
+                    "started_at": str(a["started_at"]) if a.get("started_at") else None,
+                }
+                for a in attempts
+            ],
+        }
     task_detail = get_task_detail(task_key)
     if task_detail is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -274,13 +346,16 @@ def get_task_detail_endpoint(task_key: str) -> dict[str, Any]:
 
 
 @router.post("/{task_key}/retry")
-def retry_task_endpoint(
-    task_key: str, broadcaster: Any = Depends(get_broadcaster_dep)
+async def retry_task_endpoint(
+    task_key: str,
+    db: Any = Depends(get_db_dep),
+    broadcaster: Any = Depends(get_broadcaster_dep),
 ) -> dict[str, Any]:
     """Retry a failed task by resetting its status to pending.
 
     Args:
         task_key: The unique task identifier.
+        db: Database dependency (injected).
         broadcaster: The SSEBroadcaster instance (injected dependency).
 
     Returns:
@@ -290,25 +365,63 @@ def retry_task_endpoint(
         HTTPException: 404 if task not found.
         HTTPException: 409 if task status is not retryable (only 'failed' can be retried).
     """
-    # Check if task exists
+    api_status_map: dict[str, str] = {
+        "pending": "pending",
+        "in_progress": "running",
+        "passing": "passed",
+        "complete": "passed",
+        "blocked": "failed",
+        "blocked-static-review": "failed",
+    }
+    if db is not None and hasattr(db, "_conn") and db._conn is not None:
+        task: dict[str, Any] | None = await db.get_task_by_key(task_key)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        api_status = api_status_map.get(str(task["status"]), str(task["status"]))
+        if api_status != "failed":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot retry task with status '{api_status}'."
+                    " Only failed tasks can be retried."
+                ),
+            )
+
+        await db.update_task_status(task_key, "pending")
+
+        try:
+            await broadcaster.publish(
+                {
+                    "event": "task_status_changed",
+                    "task_key": task_key,
+                    "status": "pending",
+                }
+            )
+        except Exception:
+            pass
+
+        return {"task_key": task_key, "status": "pending"}
+
+    # Fallback to placeholder
     task_detail = get_task_detail(task_key)
     if task_detail is None:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Check if task status is retryable (only 'failed' status can be retried)
     current_status = task_detail.get("status")
     if current_status != "failed":
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot retry task with status '{current_status}'. Only failed tasks can be retried.",
+            detail=(
+                f"Cannot retry task with status '{current_status}'."
+                " Only failed tasks can be retried."
+            ),
         )
 
-    # Update task status to pending in database
     updated_task = retry_task(task_key)
 
-    # Publish SSE event (non-blocking - catch exceptions)
     try:
-        broadcaster.publish(
+        await broadcaster.publish(
             {
                 "event": "task_status_changed",
                 "task_key": task_key,
@@ -316,7 +429,6 @@ def retry_task_endpoint(
             }
         )
     except Exception:
-        # SSE publish failure is non-blocking and does not roll back the retry
         pass
 
     return updated_task

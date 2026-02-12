@@ -8,13 +8,8 @@ and claim expiration handling.
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
 
 import pytest
-
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 from tdd_orchestrator.database import OrchestratorDB
 

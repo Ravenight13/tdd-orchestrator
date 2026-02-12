@@ -8,13 +8,9 @@ Tests that verify the OrchestratorDB connection lifecycle, including:
 - Proper resource cleanup
 """
 
-import sys
 from pathlib import Path
 
 import pytest
-
-# Add src directory to Python path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 from tdd_orchestrator.database import OrchestratorDB
 

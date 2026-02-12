@@ -1,13 +1,10 @@
 """Worker lifecycle tests - start/stop, heartbeat, registration."""
 
 import asyncio
-import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 from tdd_orchestrator.database import OrchestratorDB
 from tdd_orchestrator.worker_pool import Worker, WorkerConfig
 
