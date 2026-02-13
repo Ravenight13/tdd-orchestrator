@@ -108,9 +108,26 @@ FILE PATH RULES (CRITICAL):
 
 {valid_path_prefixes}
 
+INTEGRATION-BOUNDARY DETECTION (overrides Phase-based classification):
+
+If a task involves ANY of these component types, classify as integration
+regardless of Phase name:
+- Route handlers / API endpoints (FastAPI, Flask, Django views)
+- Database query methods (methods that execute SQL or ORM queries)
+- External service clients (HTTP clients, SDK wrappers)
+- Message queue consumers/producers
+
+For integration-boundary tasks:
+- test_type: "integration"
+- verify_command: Must point to integration test file (tests/integration/...)
+- done_criteria: MUST include "against real database with seeded data" or
+  "against test server with real dependencies"
+- impl_file: The actual route/DB file in src/ (do NOT set equal to test_file)
+
 TEST TYPE CLASSIFICATION (CRITICAL):
 
-Determine the test type based on the Phase name:
+Determine the test type based on the Phase name (unless overridden by
+INTEGRATION-BOUNDARY DETECTION above):
 - Phase contains "Foundation", "Core", "Unit" → test_type: "unit"
 - Phase contains "Integration" → test_type: "integration"
 - Phase contains "E2E", "End-to-End", "Acceptance" → test_type: "e2e"
@@ -196,6 +213,18 @@ Task Details:
 
 Relevant Requirements from PRD:
 {requirements_context}
+
+## TEST CONTEXT RULES
+
+If test_file path contains "integration/" or task involves route handlers/DB methods:
+- Criteria MUST reference "seeded test database" or "test server"
+- Use "GIVEN a test database seeded with..." not "GIVEN a mocked..."
+- Specify exact seed data counts: "GIVEN 5 circuits (3 closed, 2 open)"
+- Example: "GIVEN test DB with 3 tasks, GET /tasks returns list of 3 TaskResponse items"
+
+If test_file path contains "unit/" and no DB/route involvement:
+- Mocks are acceptable: "GIVEN mocked api_client.get() returns 200..."
+- Focus on isolated component behavior
 
 Include criteria for:
 - Happy path scenarios
