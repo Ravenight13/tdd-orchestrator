@@ -460,8 +460,9 @@ class TestCircuitBreakerResponse:
     def test_circuit_breaker_response_can_be_constructed_with_valid_data(self) -> None:
         """GIVEN valid circuit breaker data WHEN constructing CircuitBreakerResponse THEN model is created successfully."""
         data = {
-            "id": "cb-123",
-            "name": "api-circuit-breaker",
+            "id": "1",
+            "level": "stage",
+            "identifier": "TDD-T01:red",
             "state": "closed",
             "failure_count": 0,
             "last_failure_at": None,
@@ -469,36 +470,39 @@ class TestCircuitBreakerResponse:
 
         result = CircuitBreakerResponse.model_validate(data)
 
-        assert result.id == "cb-123"
-        assert result.name == "api-circuit-breaker"
+        assert result.id == "1"
+        assert result.level == "stage"
+        assert result.identifier == "TDD-T01:red"
         assert result.state == "closed"
 
 
 class TestCircuitBreakerListResponse:
     """Tests for CircuitBreakerListResponse model."""
 
-    def test_circuit_breaker_list_response_wraps_in_circuit_breakers_field(
+    def test_circuit_breaker_list_response_wraps_in_circuits_field(
         self,
     ) -> None:
-        """GIVEN a list of CircuitBreakerResponse dicts WHEN constructing CircuitBreakerListResponse THEN items are wrapped in 'circuit_breakers' field."""
+        """GIVEN a list of CircuitBreakerResponse dicts WHEN constructing CircuitBreakerListResponse THEN items are wrapped in 'circuits' field."""
         cb_data = [
             {
-                "id": "cb-1",
-                "name": "cb-one",
+                "id": "1",
+                "level": "stage",
+                "identifier": "TDD-T01:red",
                 "state": "closed",
                 "failure_count": 0,
                 "last_failure_at": None,
             },
             {
-                "id": "cb-2",
-                "name": "cb-two",
+                "id": "2",
+                "level": "worker",
+                "identifier": "worker_1",
                 "state": "open",
                 "failure_count": 5,
-                "last_failure_at": datetime.now(timezone.utc),
+                "last_failure_at": datetime.now(timezone.utc).isoformat(),
             },
         ]
         data = {
-            "circuit_breakers": cb_data,
+            "circuits": cb_data,
             "total": 2,
             "limit": 10,
             "offset": 0,
@@ -506,23 +510,24 @@ class TestCircuitBreakerListResponse:
 
         result = CircuitBreakerListResponse.model_validate(data)
 
-        assert len(result.circuit_breakers) == 2
-        assert result.circuit_breakers[0].id == "cb-1"
-        assert result.circuit_breakers[1].id == "cb-2"
+        assert len(result.circuits) == 2
+        assert result.circuits[0].id == "1"
+        assert result.circuits[1].id == "2"
 
     def test_circuit_breaker_list_response_includes_pagination_fields(self) -> None:
         """GIVEN CircuitBreakerListResponse with pagination WHEN constructed THEN total, limit, offset fields are present."""
         cb_data = [
             {
-                "id": "cb-1",
-                "name": "cb-one",
+                "id": "1",
+                "level": "stage",
+                "identifier": "TDD-T01:red",
                 "state": "closed",
                 "failure_count": 0,
                 "last_failure_at": None,
             },
         ]
         data = {
-            "circuit_breakers": cb_data,
+            "circuits": cb_data,
             "total": 100,
             "limit": 25,
             "offset": 50,
@@ -539,7 +544,7 @@ class TestCircuitBreakerListResponse:
     ) -> None:
         """GIVEN data without 'total' field WHEN constructing CircuitBreakerListResponse THEN ValidationError is raised."""
         data = {
-            "circuit_breakers": [],
+            "circuits": [],
             "limit": 10,
             "offset": 0,
         }
@@ -554,7 +559,7 @@ class TestCircuitBreakerListResponse:
     ) -> None:
         """GIVEN total as string 'abc' WHEN constructing CircuitBreakerListResponse THEN ValidationError is raised."""
         data = {
-            "circuit_breakers": [],
+            "circuits": [],
             "total": "abc",
             "limit": 10,
             "offset": 0,
@@ -572,8 +577,9 @@ class TestCircuitBreakerListResponse:
         """GIVEN CircuitBreakerListResponse WHEN structured THEN it follows the same pagination pattern as TaskListResponse."""
         cb_data = [
             {
-                "id": f"cb-{i}",
-                "name": f"cb-{i}",
+                "id": str(i),
+                "level": "stage",
+                "identifier": f"TDD-T0{i}:red",
                 "state": "closed",
                 "failure_count": 0,
                 "last_failure_at": None,
@@ -581,7 +587,7 @@ class TestCircuitBreakerListResponse:
             for i in range(5)
         ]
         data = {
-            "circuit_breakers": cb_data,
+            "circuits": cb_data,
             "total": 50,
             "limit": 10,
             "offset": 20,
@@ -590,11 +596,11 @@ class TestCircuitBreakerListResponse:
         result = CircuitBreakerListResponse.model_validate(data)
         dumped = result.model_dump()
 
-        assert "circuit_breakers" in dumped
+        assert "circuits" in dumped
         assert "total" in dumped
         assert "limit" in dumped
         assert "offset" in dumped
-        assert len(dumped["circuit_breakers"]) == 5
+        assert len(dumped["circuits"]) == 5
 
 
 class TestValidationErrorsAcrossAllListResponses:
@@ -604,7 +610,7 @@ class TestValidationErrorsAcrossAllListResponses:
         """GIVEN list responses without 'total' WHEN constructed THEN all raise ValidationError."""
         task_data: dict[str, object] = {"tasks": [], "limit": 10, "offset": 0}
         worker_data: dict[str, object] = {"workers": [], "limit": 10, "offset": 0}
-        cb_data: dict[str, object] = {"circuit_breakers": [], "limit": 10, "offset": 0}
+        cb_data: dict[str, object] = {"circuits": [], "limit": 10, "offset": 0}
 
         with pytest.raises(ValidationError):
             TaskListResponse.model_validate(task_data)
@@ -630,7 +636,7 @@ class TestValidationErrorsAcrossAllListResponses:
             "offset": 0,
         }
         cb_data: dict[str, object] = {
-            "circuit_breakers": [],
+            "circuits": [],
             "total": "abc",
             "limit": 10,
             "offset": 0,
@@ -649,7 +655,7 @@ class TestValidationErrorsAcrossAllListResponses:
         """GIVEN list responses without 'limit' WHEN constructed THEN all raise ValidationError."""
         task_data: dict[str, object] = {"tasks": [], "total": 0, "offset": 0}
         worker_data: dict[str, object] = {"workers": [], "total": 0, "offset": 0}
-        cb_data: dict[str, object] = {"circuit_breakers": [], "total": 0, "offset": 0}
+        cb_data: dict[str, object] = {"circuits": [], "total": 0, "offset": 0}
 
         with pytest.raises(ValidationError):
             TaskListResponse.model_validate(task_data)
@@ -664,7 +670,7 @@ class TestValidationErrorsAcrossAllListResponses:
         """GIVEN list responses without 'offset' WHEN constructed THEN all raise ValidationError."""
         task_data: dict[str, object] = {"tasks": [], "total": 0, "limit": 10}
         worker_data: dict[str, object] = {"workers": [], "total": 0, "limit": 10}
-        cb_data: dict[str, object] = {"circuit_breakers": [], "total": 0, "limit": 10}
+        cb_data: dict[str, object] = {"circuits": [], "total": 0, "limit": 10}
 
         with pytest.raises(ValidationError):
             TaskListResponse.model_validate(task_data)

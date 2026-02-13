@@ -162,15 +162,38 @@ class WorkerResponse(BaseModel):
 
 
 class CircuitBreakerResponse(BaseModel):
-    """Response model for Circuit Breaker entities."""
+    """Response model for Circuit Breaker entities.
+
+    Fields match the v_circuit_breaker_status DB view.
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    name: str
+    level: str
+    identifier: str
     state: str
     failure_count: int
-    last_failure_at: datetime | None
+    success_count: int = 0
+    extensions_count: int = 0
+    opened_at: str | None = None
+    last_failure_at: str | None = None
+    last_success_at: str | None = None
+    last_state_change_at: str | None = None
+    version: int = 1
+    run_id: int | None = None
+
+
+class CircuitHealthSummary(BaseModel):
+    """Response model for per-level circuit health (v_circuit_health_summary view)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    level: str
+    total_circuits: int
+    closed_count: int
+    open_count: int
+    half_open_count: int
 
 
 class TaskDetailResponse(BaseModel):
@@ -213,7 +236,7 @@ class CircuitBreakerListResponse(BaseModel):
     Used for circuit breaker list endpoints with pagination support.
     """
 
-    circuit_breakers: list[CircuitBreakerResponse]
+    circuits: list[CircuitBreakerResponse]
     total: int
     limit: int
     offset: int

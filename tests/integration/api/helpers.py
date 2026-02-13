@@ -151,3 +151,50 @@ async def _create_seeded_test_app() -> tuple[FastAPI, Any]:
     app.dependency_overrides[get_db_dep] = override_get_db
 
     return app, db
+
+
+async def _create_circuits_seeded_test_app() -> tuple[FastAPI, Any]:
+    """Create a test app with a seeded in-memory database containing circuit breakers.
+
+    Seeds circuit_breakers table with varying levels (stage, worker, system)
+    and states (closed, open, half_open) for integration testing of circuit routes.
+
+    Returns:
+        Tuple of (app, db) where db must be closed by the caller.
+    """
+    from tdd_orchestrator.api.dependencies import get_db_dep
+    from tdd_orchestrator.database.core import OrchestratorDB
+
+    db = OrchestratorDB(":memory:")
+    await db.connect()
+
+    # Seed circuit breakers with varying levels and states
+    circuit_inserts = [
+        # (level, identifier, state, failure_count, success_count)
+        ("stage", "TDD-T01:red", "closed", 0, 5),
+        ("stage", "TDD-T02:green", "open", 5, 0),
+        ("stage", "TDD-T03:verify", "half_open", 3, 1),
+        ("worker", "worker_1", "closed", 0, 10),
+        ("worker", "worker_2", "open", 8, 0),
+        ("system", "system", "closed", 0, 20),
+    ]
+    for level, identifier, state, fail_count, success_count in circuit_inserts:
+        opened_at = "datetime('now')" if state in ("open", "half_open") else "NULL"
+        await db._conn.execute(
+            "INSERT INTO circuit_breakers "
+            "(level, identifier, state, failure_count, success_count, opened_at) "
+            "VALUES (?, ?, ?, ?, ?, "
+            + ("datetime('now')" if state in ("open", "half_open") else "NULL")
+            + ")",
+            (level, identifier, state, fail_count, success_count),
+        )
+    await db._conn.commit()
+
+    app = _create_test_app()
+
+    async def override_get_db() -> AsyncGenerator[Any, None]:
+        yield db
+
+    app.dependency_overrides[get_db_dep] = override_get_db
+
+    return app, db

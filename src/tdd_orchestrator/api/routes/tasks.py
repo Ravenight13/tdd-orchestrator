@@ -9,6 +9,24 @@ from tdd_orchestrator.api.dependencies import get_broadcaster_dep, get_db_dep
 
 router = APIRouter()
 
+# Maps API status values → DB status values (for filtering incoming requests)
+DB_STATUS_MAP: dict[str, list[str]] = {
+    "pending": ["pending"],
+    "running": ["in_progress"],
+    "completed": ["passing", "complete"],
+    "failed": ["blocked", "blocked-static-review"],
+}
+
+# Maps DB status values → API status values (for outgoing responses)
+API_STATUS_MAP: dict[str, str] = {
+    "pending": "pending",
+    "in_progress": "running",
+    "passing": "passed",
+    "complete": "passed",
+    "blocked": "failed",
+    "blocked-static-review": "failed",
+}
+
 
 class TaskStatus(str, Enum):
     """Valid task status values."""
@@ -65,14 +83,7 @@ async def get_tasks(
         query = "SELECT * FROM tasks WHERE 1=1"
         params: list[Any] = []
         if status is not None:
-            # Map API status values to DB status values
-            db_status_map: dict[str, list[str]] = {
-                "pending": ["pending"],
-                "running": ["in_progress"],
-                "completed": ["passing", "complete"],
-                "failed": ["blocked", "blocked-static-review"],
-            }
-            db_statuses = db_status_map.get(status.value, [status.value])
+            db_statuses = DB_STATUS_MAP.get(status.value, [status.value])
             placeholders = ",".join("?" for _ in db_statuses)
             query += f" AND status IN ({placeholders})"
             params.extend(db_statuses)
@@ -91,7 +102,7 @@ async def get_tasks(
         count_query = "SELECT COUNT(*) as cnt FROM tasks WHERE 1=1"
         count_params: list[Any] = []
         if status is not None:
-            db_statuses_c = db_status_map.get(status.value, [status.value])
+            db_statuses_c = DB_STATUS_MAP.get(status.value, [status.value])
             placeholders_c = ",".join("?" for _ in db_statuses_c)
             count_query += f" AND status IN ({placeholders_c})"
             count_params.extend(db_statuses_c)
@@ -104,20 +115,11 @@ async def get_tasks(
         async with db._conn.execute(count_query, count_params) as cursor:
             count_row = await cursor.fetchone()
         total = int(count_row["cnt"]) if count_row else 0
-        # Map DB status to API status for consistency with metrics endpoint
-        api_status_map: dict[str, str] = {
-            "pending": "pending",
-            "in_progress": "running",
-            "passing": "passed",
-            "complete": "passed",
-            "blocked": "failed",
-            "blocked-static-review": "failed",
-        }
         tasks_list = [
             {
                 "id": str(row["task_key"]),
                 "title": str(row["title"]),
-                "status": api_status_map.get(str(row["status"]), str(row["status"])),
+                "status": API_STATUS_MAP.get(str(row["status"]), str(row["status"])),
                 "phase": int(row["phase"]),
                 "sequence": int(row["sequence"]),
                 "complexity": str(row["complexity"]) if row["complexity"] else "medium",
@@ -198,14 +200,6 @@ async def get_task_detail_endpoint(
     Raises:
         HTTPException: 404 if task not found.
     """
-    api_status_map: dict[str, str] = {
-        "pending": "pending",
-        "in_progress": "running",
-        "passing": "passed",
-        "complete": "passed",
-        "blocked": "failed",
-        "blocked-static-review": "failed",
-    }
     if db is not None and hasattr(db, "_conn") and db._conn is not None:
         task: dict[str, Any] | None = await db.get_task_by_key(task_key)
         if task is None:
@@ -217,7 +211,7 @@ async def get_task_detail_endpoint(
         return {
             "id": str(task["task_key"]),
             "title": str(task["title"]),
-            "status": api_status_map.get(str(task["status"]), str(task["status"])),
+            "status": API_STATUS_MAP.get(str(task["status"]), str(task["status"])),
             "phase": int(task["phase"]),
             "sequence": int(task["sequence"]),
             "complexity": str(task["complexity"]) if task.get("complexity") else "medium",
@@ -258,20 +252,12 @@ async def retry_task_endpoint(
         HTTPException: 404 if task not found.
         HTTPException: 409 if task status is not retryable (only 'failed' can be retried).
     """
-    api_status_map: dict[str, str] = {
-        "pending": "pending",
-        "in_progress": "running",
-        "passing": "passed",
-        "complete": "passed",
-        "blocked": "failed",
-        "blocked-static-review": "failed",
-    }
     if db is not None and hasattr(db, "_conn") and db._conn is not None:
         task: dict[str, Any] | None = await db.get_task_by_key(task_key)
         if task is None:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        api_status = api_status_map.get(str(task["status"]), str(task["status"]))
+        api_status = API_STATUS_MAP.get(str(task["status"]), str(task["status"]))
         if api_status != "failed":
             raise HTTPException(
                 status_code=409,

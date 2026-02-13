@@ -2,6 +2,9 @@
 
 from .responses import (
     AttemptResponse,
+    CircuitBreakerListResponse,
+    CircuitBreakerResponse,
+    CircuitHealthSummary,
     ErrorResponse,
     SSEEventData,
     TaskResponse,
@@ -9,6 +12,9 @@ from .responses import (
 
 __all__ = [
     "AttemptResponse",
+    "CircuitBreakerListResponse",
+    "CircuitBreakerResponse",
+    "CircuitHealthSummary",
     "ErrorResponse",
     "SSEEventData",
     "TaskResponse",
