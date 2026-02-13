@@ -52,6 +52,19 @@ class DecompositionConfig:
     # Generate Phase 0 prerequisite tasks from spec metadata
     generate_prerequisites: bool = True
 
+    # Integration boundary enforcement — flag unit tests targeting integration-layer files
+    enforce_integration_boundaries: bool = True
+    integration_keywords: tuple[str, ...] = (
+        "/api/",
+        "/routes/",
+        "database",
+        "db_",
+        "_db",
+        "repository",
+        "handler",
+        "endpoint",
+    )
+
 
 @dataclass
 class DecompositionMetrics:

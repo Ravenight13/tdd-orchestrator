@@ -58,6 +58,7 @@ from .validators import (
     RecursiveValidationStats,
     RecursiveValidator,
     ValidationResult,
+    validate_unique_task_keys,
 )
 
 __all__ = [
@@ -80,6 +81,7 @@ __all__ = [
     "RecursiveValidator",
     "ValidationResult",
     "RecursiveValidationStats",
+    "validate_unique_task_keys",
     # LLM Client (Phase 2)
     "LLMClient",
     "MockLLMClient",

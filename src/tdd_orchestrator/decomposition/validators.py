@@ -153,6 +153,50 @@ class AtomicityValidator:
         """
         return [self.validate(task) for task in tasks]
 
+    def validate_integration_boundaries(
+        self,
+        tasks: list[DecomposedTask],
+    ) -> list[str]:
+        """Check that integration-layer files are not tested in unit test paths.
+
+        Flags tasks where impl_file or test_file contains integration keywords
+        (routes, database, handler, etc.) but test_file lives under tests/unit/.
+
+        Args:
+            tasks: List of DecomposedTask objects to check.
+
+        Returns:
+            List of error strings describing violations. Empty if all pass.
+        """
+        if not self.config.enforce_integration_boundaries:
+            return []
+
+        errors: list[str] = []
+        keywords = self.config.integration_keywords
+
+        for i, task in enumerate(tasks):
+            test_path = task.test_file.lower()
+
+            # Only flag if test lives in tests/unit/
+            if "tests/unit/" not in test_path:
+                continue
+
+            # Check impl_file and test_file for integration keywords
+            impl_path = task.impl_file.lower()
+            matched_keyword = ""
+            for kw in keywords:
+                if kw in impl_path or kw in test_path:
+                    matched_keyword = kw
+                    break
+
+            if matched_keyword:
+                errors.append(
+                    f"Task {i} ({task.task_key}): integration-layer file "
+                    f"(matched '{matched_keyword}') has unit test at {task.test_file}"
+                )
+
+        return errors
+
 
 class RecursiveValidator:
     """Recursive task validation and re-decomposition engine.
@@ -376,3 +420,44 @@ class RecursiveValidator:
     def reset_counters(self) -> None:
         """Reset subtask counters for fresh validation run."""
         self._subtask_counter.clear()
+
+
+def validate_unique_task_keys(tasks: list[DecomposedTask]) -> list[str]:
+    """Check that all task keys and (impl_file, test_file) pairs are unique.
+
+    Args:
+        tasks: List of DecomposedTask objects to check.
+
+    Returns:
+        List of error strings describing violations. Empty if all unique.
+    """
+    errors: list[str] = []
+
+    # Check duplicate task_key values
+    seen_keys: dict[str, int] = {}
+    for i, task in enumerate(tasks):
+        key = task.task_key
+        if key in seen_keys:
+            errors.append(
+                f"Duplicate task_key '{key}' at indices {seen_keys[key]} and {i}"
+            )
+        else:
+            seen_keys[key] = i
+
+    # Check duplicate (impl_file, test_file) pairs — only when both are non-empty
+    seen_pairs: dict[tuple[str, str], tuple[int, str]] = {}
+    for i, task in enumerate(tasks):
+        if not task.impl_file or not task.test_file:
+            continue
+        pair = (task.impl_file, task.test_file)
+        if pair in seen_pairs:
+            prev_idx, prev_key = seen_pairs[pair]
+            errors.append(
+                f"Duplicate file pair ({task.impl_file}, {task.test_file}) "
+                f"in tasks '{prev_key}' (index {prev_idx}) and "
+                f"'{task.task_key}' (index {i})"
+            )
+        else:
+            seen_pairs[pair] = (i, task.task_key)
+
+    return errors

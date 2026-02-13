@@ -17,6 +17,7 @@ from tdd_orchestrator.decomposition.validators import (
     AtomicityValidator,
     RecursiveValidator,
     ValidationResult,
+    validate_unique_task_keys,
 )
 
 
@@ -571,3 +572,215 @@ class TestSubtaskKeyGeneration:
         # Should start over at A
         suffix = validator._get_subtask_suffix(parent_key)
         assert suffix == "A"
+
+
+# =============================================================================
+# Test Integration Boundary Validation
+# =============================================================================
+
+
+class TestIntegrationBoundaryValidation:
+    """Tests for AtomicityValidator.validate_integration_boundaries."""
+
+    def test_route_handler_in_unit_test_triggers_error(
+        self, atomicity_validator: AtomicityValidator
+    ) -> None:
+        """Route handler impl with unit test path should error."""
+        task = DecomposedTask(
+            task_key="T-01",
+            title="Route handler",
+            goal="Test",
+            estimated_tests=10,
+            estimated_lines=50,
+            test_file="tests/unit/api/test_routes.py",
+            impl_file="src/api/routes/users.py",
+        )
+        errors = atomicity_validator.validate_integration_boundaries([task])
+        assert len(errors) == 1
+        assert "/api/" in errors[0]
+
+    def test_route_handler_in_integration_test_no_error(
+        self, atomicity_validator: AtomicityValidator
+    ) -> None:
+        """Route handler impl with integration test path should pass."""
+        task = DecomposedTask(
+            task_key="T-01",
+            title="Route handler",
+            goal="Test",
+            estimated_tests=10,
+            estimated_lines=50,
+            test_file="tests/integration/api/test_routes.py",
+            impl_file="src/api/routes/users.py",
+        )
+        errors = atomicity_validator.validate_integration_boundaries([task])
+        assert errors == []
+
+    def test_non_route_file_in_unit_test_no_error(
+        self, atomicity_validator: AtomicityValidator
+    ) -> None:
+        """Regular file with unit test should pass."""
+        task = DecomposedTask(
+            task_key="T-01",
+            title="Config loader",
+            goal="Test",
+            estimated_tests=10,
+            estimated_lines=50,
+            test_file="tests/unit/test_config.py",
+            impl_file="src/config/loader.py",
+        )
+        errors = atomicity_validator.validate_integration_boundaries([task])
+        assert errors == []
+
+    def test_disabled_enforcement_returns_no_errors(self) -> None:
+        """When enforce_integration_boundaries=False, skip all checks."""
+        config = DecompositionConfig(enforce_integration_boundaries=False)
+        validator = AtomicityValidator(config)
+        task = DecomposedTask(
+            task_key="T-01",
+            title="Route handler",
+            goal="Test",
+            estimated_tests=10,
+            estimated_lines=50,
+            test_file="tests/unit/api/test_routes.py",
+            impl_file="src/api/routes/users.py",
+        )
+        errors = validator.validate_integration_boundaries([task])
+        assert errors == []
+
+    def test_multiple_violations_reported(
+        self, atomicity_validator: AtomicityValidator
+    ) -> None:
+        """Multiple boundary violations should all be reported."""
+        tasks = [
+            DecomposedTask(
+                task_key="T-01",
+                title="Route handler",
+                goal="Test",
+                estimated_tests=10,
+                estimated_lines=50,
+                test_file="tests/unit/api/test_routes.py",
+                impl_file="src/api/routes/users.py",
+            ),
+            DecomposedTask(
+                task_key="T-02",
+                title="DB handler",
+                goal="Test",
+                estimated_tests=10,
+                estimated_lines=50,
+                test_file="tests/unit/test_db_manager.py",
+                impl_file="src/database/manager.py",
+            ),
+        ]
+        errors = atomicity_validator.validate_integration_boundaries(tasks)
+        assert len(errors) == 2
+
+    def test_empty_task_list_no_errors(
+        self, atomicity_validator: AtomicityValidator
+    ) -> None:
+        """Empty task list should return no errors."""
+        errors = atomicity_validator.validate_integration_boundaries([])
+        assert errors == []
+
+
+# =============================================================================
+# Test Key Uniqueness Validation
+# =============================================================================
+
+
+class TestKeyUniquenessValidation:
+    """Tests for validate_unique_task_keys standalone function."""
+
+    def test_all_unique_keys_no_errors(self) -> None:
+        """All unique task keys should pass."""
+        tasks = [
+            DecomposedTask(
+                task_key="T-01", title="A", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_a.py", impl_file="src/a.py",
+            ),
+            DecomposedTask(
+                task_key="T-02", title="B", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_b.py", impl_file="src/b.py",
+            ),
+        ]
+        errors = validate_unique_task_keys(tasks)
+        assert errors == []
+
+    def test_duplicate_key_returns_error(self) -> None:
+        """Duplicate task_key should return error with both indices."""
+        tasks = [
+            DecomposedTask(
+                task_key="T-01", title="A", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_a.py", impl_file="src/a.py",
+            ),
+            DecomposedTask(
+                task_key="T-01", title="B", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_b.py", impl_file="src/b.py",
+            ),
+        ]
+        errors = validate_unique_task_keys(tasks)
+        assert len(errors) == 1
+        assert "T-01" in errors[0]
+        assert "0" in errors[0]
+        assert "1" in errors[0]
+
+    def test_duplicate_file_pair_returns_error(self) -> None:
+        """Duplicate (impl_file, test_file) pair should return error."""
+        tasks = [
+            DecomposedTask(
+                task_key="T-01", title="A", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_a.py", impl_file="src/a.py",
+            ),
+            DecomposedTask(
+                task_key="T-02", title="B", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_a.py", impl_file="src/a.py",
+            ),
+        ]
+        errors = validate_unique_task_keys(tasks)
+        assert len(errors) == 1
+        assert "T-01" in errors[0]
+        assert "T-02" in errors[0]
+
+    def test_same_impl_different_test_no_error(self) -> None:
+        """Same impl_file but different test_file should pass."""
+        tasks = [
+            DecomposedTask(
+                task_key="T-01", title="A", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_a.py", impl_file="src/shared.py",
+            ),
+            DecomposedTask(
+                task_key="T-02", title="B", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="tests/test_b.py", impl_file="src/shared.py",
+            ),
+        ]
+        errors = validate_unique_task_keys(tasks)
+        assert errors == []
+
+    def test_empty_task_list_no_errors(self) -> None:
+        """Empty task list should return no errors."""
+        errors = validate_unique_task_keys([])
+        assert errors == []
+
+    def test_empty_impl_or_test_file_skipped(self) -> None:
+        """Tasks with empty impl_file or test_file skip pair check."""
+        tasks = [
+            DecomposedTask(
+                task_key="T-01", title="A", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="", impl_file="",
+            ),
+            DecomposedTask(
+                task_key="T-02", title="B", goal="G",
+                estimated_tests=10, estimated_lines=50,
+                test_file="", impl_file="",
+            ),
+        ]
+        errors = validate_unique_task_keys(tasks)
+        assert errors == []

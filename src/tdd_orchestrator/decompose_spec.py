@@ -54,7 +54,9 @@ from .decomposition import (
     RecursiveValidator,
     SpecParser,
     TaskGenerator,
+    validate_unique_task_keys,
 )
+from .decomposition.exceptions import DecompositionError
 from .decomposition.spec_validator import SpecConformanceValidator
 from .task_loader import (
     get_existing_prefixes,
@@ -423,6 +425,24 @@ async def run_decomposition(
     overlap_count = sum(1 for t in final_tasks if t.task_type == "verify-only")
     if overlap_count:
         logger.info("Overlap detection: %d tasks marked as verify-only", overlap_count)
+
+    # Validate integration boundaries (hard enforcement)
+    boundary_errors = atomicity_validator.validate_integration_boundaries(final_tasks)
+    if boundary_errors:
+        for err in boundary_errors:
+            logger.warning("Boundary violation: %s", err)
+        raise DecompositionError(
+            f"Integration boundary violations: {'; '.join(boundary_errors)}"
+        )
+
+    # Validate task key and file pair uniqueness
+    key_errors = validate_unique_task_keys(final_tasks)
+    if key_errors:
+        for err in key_errors:
+            logger.warning("Key uniqueness violation: %s", err)
+        raise DecompositionError(
+            f"Task key/file violations: {'; '.join(key_errors)}"
+        )
 
     # Step 5.5: Validate against spec
     if parsed_spec.module_structure.get("files") or parsed_spec.module_api:
