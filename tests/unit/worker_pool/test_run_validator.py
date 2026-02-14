@@ -261,6 +261,43 @@ class TestRunValidatorNonBlockingChecks:
         assert result.passed is True
         assert result.import_check_passed is False
 
+    async def test_ac_validation_summary_populated(
+        self, validator: RunValidator, mock_db: AsyncMock
+    ) -> None:
+        """AC validation populates summary string in result."""
+        mock_db.get_all_tasks.return_value = [_make_task()]
+
+        with (
+            patch.object(validator, "_run_command", return_value=(True, "ok")),
+            patch(
+                "tdd_orchestrator.worker_pool.ac_validator.validate_run_ac",
+                return_value="1/2 criteria verifiable, 1/1 verified as satisfied",
+            ) as mock_ac,
+        ):
+            result = await validator.validate_run(1)
+
+        mock_ac.assert_awaited_once()
+        assert result.ac_validation_summary == (
+            "1/2 criteria verifiable, 1/1 verified as satisfied"
+        )
+
+    async def test_ac_validation_does_not_block(
+        self, validator: RunValidator, mock_db: AsyncMock
+    ) -> None:
+        """AC validation issues do not affect result.passed."""
+        mock_db.get_all_tasks.return_value = [_make_task()]
+
+        with (
+            patch.object(validator, "_run_command", return_value=(True, "ok")),
+            patch(
+                "tdd_orchestrator.worker_pool.ac_validator.validate_run_ac",
+                return_value="0/5 criteria verifiable",
+            ),
+        ):
+            result = await validator.validate_run(1)
+
+        assert result.passed is True
+
 
 class TestRunValidatorSkippedChecks:
     """Tests for skipping checks when files are missing."""

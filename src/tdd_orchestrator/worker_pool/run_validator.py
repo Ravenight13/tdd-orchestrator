@@ -75,7 +75,7 @@ class RunValidator:
     Non-blocking checks (logged only):
     - Module import verification
     - Done criteria aggregation
-    - AC validation (Phase 5 placeholder)
+    - AC validation (heuristic matchers)
 
     Args:
         db: Database instance for querying tasks.
@@ -131,7 +131,7 @@ class RunValidator:
         # Non-blocking checks
         await self._check_module_imports(result, tasks)
         await self._aggregate_done_criteria(result, tasks)
-        self._run_ac_validation(result)
+        await self._run_ac_validation(result, tasks)
 
         # Compute final passed status from blocking checks
         result.passed = (
@@ -275,9 +275,16 @@ class RunValidator:
 
         result.done_criteria_summary = f"{satisfied}/{total} criteria satisfied"
 
-    def _run_ac_validation(self, result: RunValidationResult) -> None:
-        """Placeholder for Phase 5A acceptance criteria validation."""
-        result.ac_validation_summary = ""
+    async def _run_ac_validation(
+        self, result: RunValidationResult, tasks: list[dict[str, Any]]
+    ) -> None:
+        """Validate acceptance criteria for all completed tasks."""
+        from ..worker_pool.ac_validator import validate_run_ac
+
+        summary = await validate_run_ac(tasks, self.base_dir)
+        result.ac_validation_summary = summary
+        if summary:
+            logger.info("AC validation: %s", summary)
 
     async def _run_command(self, *args: str) -> tuple[bool, str]:
         """Run a command as an async subprocess.
