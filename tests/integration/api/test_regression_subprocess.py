@@ -30,6 +30,7 @@ class TestFullRegressionSuite:
             capture_output=True,
             text=True,
             cwd="/Users/cliffclarke/Projects/tdd_orchestrator",
+            timeout=30,
         )
 
         # Should not have import errors
@@ -54,6 +55,7 @@ class TestFullRegressionSuite:
             capture_output=True,
             text=True,
             cwd="/Users/cliffclarke/Projects/tdd_orchestrator",
+            timeout=30,
         )
 
         # Should not have fixture errors
@@ -86,6 +88,7 @@ class TestFullRegressionSuite:
             capture_output=True,
             text=True,
             cwd="/Users/cliffclarke/Projects/tdd_orchestrator",
+            timeout=180,
         )
 
         # Exit code 0 = all pass, Exit code 1 = some failures (acceptable if pre-existing)

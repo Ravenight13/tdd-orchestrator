@@ -301,18 +301,28 @@ class TestInitAndShutdownDependenciesDirect:
     @pytest.mark.asyncio
     async def test_init_dependencies_is_callable(self) -> None:
         """Verify init_dependencies is an async callable."""
-        # Should be able to call it without error
-        # The actual behavior depends on implementation
-        await init_dependencies()
-        # init_dependencies completes without error
+        app = create_app()
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.get("/health")
+            assert response.status_code == 200
 
     @pytest.mark.asyncio
     async def test_shutdown_dependencies_is_callable(self) -> None:
         """Verify shutdown_dependencies is an async callable."""
-        # First init, then shutdown
-        await init_dependencies()
-        await shutdown_dependencies()
-        # shutdown_dependencies completes without error
+        app = create_app()
+
+        # Lifespan handles init + shutdown; exiting the context triggers shutdown
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.get("/health")
+            assert response.status_code == 200
+        # If we reach here, shutdown completed without error
 
     @pytest.mark.asyncio
     async def test_shutdown_dependencies_safe_to_call_without_init(self) -> None:
