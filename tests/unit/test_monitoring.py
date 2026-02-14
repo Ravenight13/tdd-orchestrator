@@ -265,7 +265,7 @@ class TestGetCircuitHealth:
     @pytest.mark.asyncio
     async def test_unknown_status_on_error(self, mock_db: AsyncMock) -> None:
         """Test unknown status on database error."""
-        mock_db._conn.execute = AsyncMock(side_effect=Exception("DB error"))
+        mock_db._conn.execute = MagicMock(side_effect=Exception("DB error"))
 
         health = await get_circuit_health(mock_db)
         assert health.status == CircuitHealthStatus.UNKNOWN

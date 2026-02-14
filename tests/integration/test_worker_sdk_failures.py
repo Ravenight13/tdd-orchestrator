@@ -7,6 +7,7 @@ budget enforcement, and timeout scenarios.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -161,8 +162,11 @@ class TestSDKRateLimiting:
             )
 
             # Mock SDK to raise timeout exception
-            async def timeout_query(*args: object, **kwargs: object) -> None:
+            async def timeout_query(
+                *args: object, **kwargs: object
+            ) -> AsyncIterator[object]:
                 raise asyncio.TimeoutError("SDK timeout")
+                yield  # pragma: no cover — make this an async generator
 
             with (
                 patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
@@ -412,8 +416,11 @@ class TestBudgetEnforcement:
             )
 
             # Mock SDK to raise exception
-            async def failing_query(*args: object, **kwargs: object) -> None:
+            async def failing_query(
+                *args: object, **kwargs: object
+            ) -> AsyncIterator[object]:
                 raise RuntimeError("SDK failure")
+                yield  # pragma: no cover — make this an async generator
 
             with (
                 patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -31,7 +31,7 @@ class TestWireCircuitBreakerSSE:
     def test_callback_triggers_sse_broadcast_with_correct_event_type(self) -> None:
         """GIVEN wire_circuit_breaker_sse has been called, WHEN circuit breaker state changes, THEN SSE event is broadcast with type 'circuit_breaker_state_changed'."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -60,7 +60,7 @@ class TestWireCircuitBreakerSSE:
     def test_callback_broadcasts_json_data_with_required_fields(self) -> None:
         """GIVEN wire_circuit_breaker_sse has been called, WHEN callback fires, THEN JSON data contains task_id, old_state, new_state, failure_count, and ISO-8601 timestamp."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -100,10 +100,10 @@ class TestWireCircuitBreakerSSE:
         broadcaster = MagicMock()
         broadcast_calls: list[dict[str, Any]] = []
 
-        async def mock_broadcast(**kwargs: Any) -> None:
+        def mock_broadcast(**kwargs: Any) -> None:
             broadcast_calls.append(kwargs)
 
-        broadcaster.broadcast = AsyncMock(side_effect=mock_broadcast)
+        broadcaster.broadcast = MagicMock(side_effect=mock_broadcast)
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -135,7 +135,7 @@ class TestWireCircuitBreakerSSE:
         """GIVEN no SSE clients are connected, WHEN callback fires, THEN it completes without error."""
         broadcaster = MagicMock()
         # Simulate no clients - broadcast succeeds but does nothing
-        broadcaster.broadcast = AsyncMock(return_value=None)
+        broadcaster.broadcast = MagicMock(return_value=None)
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -165,7 +165,7 @@ class TestWireCircuitBreakerSSE:
     ) -> None:
         """GIVEN broadcast raises an exception, WHEN callback fires, THEN exception is caught and warning is logged."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock(side_effect=RuntimeError("disconnected transport"))
+        broadcaster.broadcast = MagicMock(side_effect=RuntimeError("disconnected transport"))
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -199,7 +199,7 @@ class TestWireCircuitBreakerSSE:
     def test_callback_does_not_propagate_exception_to_metrics_collector(self) -> None:
         """GIVEN broadcast raises exception, WHEN callback fires, THEN error does not propagate."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock(side_effect=RuntimeError("transport error"))
+        broadcaster.broadcast = MagicMock(side_effect=RuntimeError("transport error"))
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -236,7 +236,7 @@ class TestWireCircuitBreakerSSEEdgeCases:
     def test_callback_handles_empty_task_id(self) -> None:
         """GIVEN payload with empty task_id, WHEN callback fires, THEN event is still broadcast."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -266,7 +266,7 @@ class TestWireCircuitBreakerSSEEdgeCases:
     def test_callback_handles_zero_failure_count(self) -> None:
         """GIVEN payload with failure_count=0, WHEN callback fires, THEN event contains failure_count=0."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -296,7 +296,7 @@ class TestWireCircuitBreakerSSEEdgeCases:
     def test_callback_handles_high_failure_count(self) -> None:
         """GIVEN payload with high failure_count, WHEN callback fires, THEN event contains correct count."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -326,7 +326,7 @@ class TestWireCircuitBreakerSSEEdgeCases:
     def test_multiple_state_changes_trigger_multiple_broadcasts(self) -> None:
         """GIVEN wire_circuit_breaker_sse called, WHEN multiple state changes occur, THEN multiple events broadcast."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -354,7 +354,7 @@ class TestWireCircuitBreakerSSEEdgeCases:
     def test_timestamp_is_recent(self) -> None:
         """GIVEN callback fires, WHEN event is created, THEN timestamp is within reasonable time window."""
         broadcaster = MagicMock()
-        broadcaster.broadcast = AsyncMock()
+        broadcaster.broadcast = MagicMock()
         collector = MagicMock()
         registered_callback: Any = None
 
@@ -368,7 +368,7 @@ class TestWireCircuitBreakerSSEEdgeCases:
 
         assert registered_callback is not None
 
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         payload = {
             "task_id": "t9",
             "old_state": "closed",
@@ -376,11 +376,11 @@ class TestWireCircuitBreakerSSEEdgeCases:
             "failure_count": 1,
         }
         registered_callback(payload)
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
 
         call_args = broadcaster.broadcast.call_args
         data = json.loads(call_args[1]["data"])
-        event_time = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00").replace("+00:00", ""))
+        event_time = datetime.fromisoformat(data["timestamp"])
 
-        # Timestamp should be between before and after (allowing for timezone differences)
-        assert data["timestamp"] is not None
+        # Timestamp should be between before and after
+        assert before <= event_time <= after
