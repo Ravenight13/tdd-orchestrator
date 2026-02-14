@@ -418,6 +418,17 @@ async def run_decomposition(
     # Only calculate dependencies, don't reassign keys (they're already correct)
     final_tasks = generator._calculate_dependencies(validated_tasks)
 
+    # Validate no circular dependencies in task graph
+    from .decomposition.dependency_validator import validate_no_cycles
+
+    cycle_errors = validate_no_cycles(final_tasks)
+    if cycle_errors:
+        for err in cycle_errors:
+            logger.warning("Circular dependency: %s", err)
+        raise DecompositionError(
+            f"Circular dependencies detected: {'; '.join(cycle_errors)}"
+        )
+
     # Post-dependency: Detect impl_file + module_exports overlaps (deterministic)
     from .decomposition.overlap_detector import detect_overlaps
 
