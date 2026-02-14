@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from .cli_circuits import circuits
+from .cli_ingest import ingest_command
 from .cli_init import init_command
 from .cli_validate import validate
 from .database import OrchestratorDB
@@ -37,6 +38,7 @@ def cli(verbose: bool) -> None:
 
 # Register subcommand groups from separate modules
 cli.add_command(circuits)
+cli.add_command(ingest_command)
 cli.add_command(init_command)
 cli.add_command(validate)
 
