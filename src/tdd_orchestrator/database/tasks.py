@@ -104,6 +104,56 @@ class TaskMixin:
             rows = await cursor.fetchall()
             return [int(row["phase"]) for row in rows]
 
+    async def get_tasks_in_phases_before(self, phase: int) -> list[dict[str, Any]]:
+        """Get all tasks from phases before the given phase.
+
+        Used by phase gate validation to check whether prior phases
+        are complete before starting a new phase.
+
+        Args:
+            phase: The phase about to start. Returns tasks from phases < phase.
+
+        Returns:
+            List of task dicts ordered by phase ASC, sequence ASC.
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return []
+
+        async with self._conn.execute(
+            "SELECT * FROM tasks WHERE phase < ? ORDER BY phase, sequence",
+            (phase,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_test_files_from_phases_before(self, phase: int) -> list[str]:
+        """Get distinct non-null test_file paths from phases before the given phase.
+
+        Used by phase gate validation to collect regression test files
+        from prior phases.
+
+        Args:
+            phase: The phase about to start. Returns test files from phases < phase.
+
+        Returns:
+            List of distinct test file paths (nulls excluded).
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return []
+
+        async with self._conn.execute(
+            """
+            SELECT DISTINCT test_file FROM tasks
+            WHERE phase < ? AND test_file IS NOT NULL
+            ORDER BY test_file
+            """,
+            (phase,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [str(row["test_file"]) for row in rows]
+
     # =========================================================================
     # Task Mutations
     # =========================================================================

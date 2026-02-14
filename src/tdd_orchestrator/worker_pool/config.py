@@ -126,6 +126,7 @@ class WorkerConfig:
     use_local_branches: bool = False
     single_branch_mode: bool = False
     git_stash_enabled: bool = True
+    enable_phase_gates: bool = True
 
 
 @dataclass

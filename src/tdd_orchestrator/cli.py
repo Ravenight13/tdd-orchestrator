@@ -55,6 +55,11 @@ cli.add_command(circuits)
     is_flag=True,
     help="Each worker uses its own branch (requires worktrees or separate clones)",
 )
+@click.option(
+    "--no-phase-gates",
+    is_flag=True,
+    help="Disable phase gate validation between phases",
+)
 def run(
     parallel: bool,
     workers: int,
@@ -65,6 +70,7 @@ def run(
     max_invocations: int,
     local: bool,
     multi_branch: bool,
+    no_phase_gates: bool,
 ) -> None:
     """Run the TDD orchestrator."""
     if all_phases and phase is not None:
@@ -76,7 +82,7 @@ def run(
     asyncio.run(
         _run_async(
             parallel, workers, phase, all_phases, db, slack_webhook,
-            max_invocations, local, single_branch,
+            max_invocations, local, single_branch, no_phase_gates,
         )
     )
 
@@ -91,6 +97,7 @@ async def _run_async(
     max_invocations: int,
     local: bool,
     single_branch: bool,
+    no_phase_gates: bool = False,
 ) -> None:
     """Async implementation of run command."""
     _validate_workers(workers)
@@ -102,7 +109,7 @@ async def _run_async(
         if parallel:
             await _run_parallel(
                 db, workers, phase, all_phases, slack_webhook,
-                max_invocations, local, single_branch,
+                max_invocations, local, single_branch, no_phase_gates,
             )
         else:
             click.echo("Sequential execution not yet implemented")
@@ -130,6 +137,7 @@ async def _run_parallel(
     max_invocations: int,
     local: bool,
     single_branch: bool,
+    no_phase_gates: bool = False,
 ) -> None:
     """Run parallel execution with worker pool."""
     mode = "single-branch" if single_branch else "multi-branch"
@@ -142,6 +150,7 @@ async def _run_parallel(
         use_local_branches=local,
         single_branch_mode=single_branch,
         git_stash_enabled=False,  # Disable stash for simpler conventional commit workflow
+        enable_phase_gates=not no_phase_gates,
     )
 
     pool = WorkerPool(
