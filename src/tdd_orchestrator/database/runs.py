@@ -184,6 +184,22 @@ class RunsMixin:
             )
             await self._conn.commit()
 
+    async def get_latest_run_id(self) -> int | None:
+        """Get the most recent execution run ID.
+
+        Returns:
+            The ID of the latest run, or None if no runs exist.
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return None
+
+        async with self._conn.execute(
+            "SELECT id FROM execution_runs ORDER BY started_at DESC LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return int(row["id"]) if row else None
+
     async def record_invocation(
         self,
         run_id: int,

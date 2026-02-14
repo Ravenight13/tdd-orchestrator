@@ -104,6 +104,22 @@ class TaskMixin:
             rows = await cursor.fetchall()
             return [int(row["phase"]) for row in rows]
 
+    async def get_all_phases(self) -> list[int]:
+        """Get all distinct phases in ascending order, regardless of status.
+
+        Returns:
+            Sorted list of all phase numbers present in the tasks table.
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return []
+
+        async with self._conn.execute(
+            "SELECT DISTINCT phase FROM tasks ORDER BY phase"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [int(row["phase"]) for row in rows]
+
     async def get_tasks_in_phases_before(self, phase: int) -> list[dict[str, Any]]:
         """Get all tasks from phases before the given phase.
 

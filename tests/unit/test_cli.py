@@ -73,3 +73,15 @@ class TestCLI:
         result = runner.invoke(cli, ["status", "--help"])
         assert result.exit_code == 0
         assert "--db" in result.output
+
+    def test_validate_command_exists(self, runner: CliRunner) -> None:
+        """Test that validate command group is registered."""
+        result = runner.invoke(cli, ["validate", "--help"])
+        assert result.exit_code == 0
+        assert "validation" in result.output.lower()
+
+    def test_help_displays_validate(self, runner: CliRunner) -> None:
+        """Test that main help includes validate command."""
+        result = runner.invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        assert "validate" in result.output

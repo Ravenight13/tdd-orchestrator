@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from .cli_circuits import circuits
+from .cli_validate import validate
 from .database import OrchestratorDB
 from .worker_pool import PoolResult, WorkerConfig, WorkerPool
 
@@ -33,8 +34,9 @@ def cli(verbose: bool) -> None:
         logging.getLogger().setLevel(logging.DEBUG)
 
 
-# Register circuits subcommand group from separate module
+# Register subcommand groups from separate modules
 cli.add_command(circuits)
+cli.add_command(validate)
 
 
 @cli.command()
