@@ -63,6 +63,38 @@ class GitCoordinator:
         logger.info("Created branch %s for worker %d", branch_name, worker_id)
         return branch_name
 
+    async def create_feature_branch(
+        self,
+        branch_name: str,
+        base_branch: str = "main",
+        use_local: bool = False,
+    ) -> str:
+        """Create and checkout a feature branch.
+
+        Unlike create_worker_branch(), this creates a top-level branch
+        (no worker prefix) for the entire pipeline's work.
+
+        Args:
+            branch_name: Branch name (e.g., "feat/user-auth").
+            base_branch: Branch to create from.
+            use_local: If True, create from HEAD instead of origin.
+
+        Returns:
+            The branch name.
+
+        Raises:
+            subprocess.CalledProcessError: If branch already exists or
+                git command fails.
+        """
+        async with self._lock:
+            if use_local:
+                await self._run_git("checkout", "-b", branch_name)
+            else:
+                await self._run_git("fetch", "origin", base_branch)
+                await self._run_git("checkout", "-b", branch_name, f"origin/{base_branch}")
+        logger.info("Created feature branch %s from %s", branch_name, base_branch)
+        return branch_name
+
     async def commit_changes(
         self,
         message: str,
