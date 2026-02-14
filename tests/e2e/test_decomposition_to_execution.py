@@ -143,6 +143,7 @@ class TestDecompositionToExecution:
         mock_git_e2e,
         mock_sdk_success,
         mock_verifier_tdd_cycle,
+        tmp_path: Path,
     ) -> None:
         """Loaded DecomposedTask executes through worker RED → GREEN → VERIFY stages."""
         # Create DecomposedTask
@@ -168,6 +169,10 @@ class TestDecompositionToExecution:
         result = await load_tdd_tasks([task.to_dict()], db=e2e_db)
         assert result["loaded"] == 1, "Task should load successfully"
 
+        # Create test file so RED stage verifier finds it
+        (tmp_path / "tests").mkdir()
+        (tmp_path / "tests" / "test_validation.py").write_text("def test_placeholder(): pass\n")
+
         # Setup worker
         run_id = await e2e_db.start_execution_run(max_workers=1)
         config = WorkerConfig(
@@ -175,8 +180,7 @@ class TestDecompositionToExecution:
             single_branch_mode=True,
             heartbeat_interval_seconds=1,
         )
-        worker = Worker(1, e2e_db, mock_git_e2e, config, run_id, Path.cwd())
-        worker.verifier = mock_verifier_tdd_cycle
+        worker = Worker(1, e2e_db, mock_git_e2e, config, run_id, tmp_path)
 
         # Patch Agent SDK
         with (
@@ -185,6 +189,8 @@ class TestDecompositionToExecution:
             patch("tdd_orchestrator.worker_pool.worker.ClaudeAgentOptions", return_value=MagicMock()),
         ):
             await worker.start()
+            # Set mock verifier AFTER start() (start() overwrites self.verifier)
+            worker.verifier = mock_verifier_tdd_cycle
 
             # Get loaded task from database
             db_task = await e2e_db.get_task_by_key("EXEC-001")

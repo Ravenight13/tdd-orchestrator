@@ -22,6 +22,7 @@ class TestTaskProcessing:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement foo feature",
                 phase=0,
                 sequence=0,
                 test_file="tests/test_foo.py",
@@ -76,6 +77,7 @@ class TestTaskProcessing:
             await db.create_task(
                 "TDD-02",
                 "Test Task",
+                goal="Implement bar feature",
                 phase=0,
                 sequence=0,
                 test_file="tests/test_bar.py",

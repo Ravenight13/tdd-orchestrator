@@ -239,6 +239,7 @@ class TestFailureRecovery:
         task_id = await e2e_db.create_task(
             task_key="TDD-FAIL-01",
             title="Failure Recovery Test",
+            goal="Implement failure recovery feature",
             phase=0,
             sequence=0,
             test_file="tests/test_fail.py",

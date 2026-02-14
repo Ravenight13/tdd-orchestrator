@@ -63,6 +63,7 @@ class TestSDKInitialization:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
@@ -112,6 +113,7 @@ class TestSDKRateLimiting:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
@@ -140,6 +142,7 @@ class TestSDKRateLimiting:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
@@ -342,6 +345,7 @@ class TestBudgetEnforcement:
             created_task_id = await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
@@ -389,6 +393,7 @@ class TestBudgetEnforcement:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
@@ -473,6 +478,7 @@ class TestSDKIntegrationErrors:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
@@ -520,6 +526,7 @@ class TestSDKIntegrationErrors:
             await db.create_task(
                 "TDD-01",
                 "Test Task",
+                goal="Implement example feature",
                 phase=0,
                 sequence=0,
                 test_file="test_example.py",
