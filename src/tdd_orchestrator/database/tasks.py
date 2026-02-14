@@ -87,6 +87,23 @@ class TaskMixin:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
+    async def get_pending_phases(self) -> list[int]:
+        """Get phases that have pending tasks, in ascending order.
+
+        Returns:
+            Sorted list of phase numbers with at least one pending task.
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return []
+
+        async with self._conn.execute(
+            "SELECT DISTINCT phase FROM tasks WHERE status = ? ORDER BY phase",
+            ("pending",),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [int(row["phase"]) for row in rows]
+
     # =========================================================================
     # Task Mutations
     # =========================================================================

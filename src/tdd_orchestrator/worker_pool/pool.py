@@ -177,3 +177,65 @@ class WorkerPool:
             result.total_invocations = await self.db.get_invocation_count(self.run_id)
 
         return result
+
+    async def run_all_phases(self) -> PoolResult:
+        """Run all pending phases sequentially with failure gating.
+
+        Iterates through phases returned by get_pending_phases(), running
+        each via run_parallel_phase(). Stops on first phase failure (unless
+        the stopped_reason is "no_tasks", which is non-fatal).
+
+        Returns:
+            PoolResult with aggregated statistics across all phases.
+        """
+        phases = await self.db.get_pending_phases()
+
+        if not phases:
+            logger.info("No pending phases found")
+            return PoolResult(
+                tasks_completed=0,
+                tasks_failed=0,
+                total_invocations=0,
+                worker_stats=[],
+                stopped_reason="no_tasks",
+            )
+
+        aggregate = PoolResult(
+            tasks_completed=0,
+            tasks_failed=0,
+            total_invocations=0,
+            worker_stats=[],
+        )
+
+        for phase in phases:
+            if not await self._run_phase_gate(phase):
+                logger.warning("Phase gate blocked phase %d", phase)
+                aggregate.stopped_reason = "gate_failure"
+                break
+
+            logger.info("Starting phase %d", phase)
+            result = await self.run_parallel_phase(phase)
+
+            aggregate.tasks_completed += result.tasks_completed
+            aggregate.tasks_failed += result.tasks_failed
+            aggregate.total_invocations += result.total_invocations
+            aggregate.worker_stats = result.worker_stats
+
+            if result.stopped_reason and result.stopped_reason != "no_tasks":
+                aggregate.stopped_reason = result.stopped_reason
+                logger.error("Phase %d stopped: %s", phase, result.stopped_reason)
+                break
+
+        if not aggregate.stopped_reason:
+            if not await self._run_end_of_run_validation():
+                aggregate.stopped_reason = "validation_failure"
+
+        return aggregate
+
+    async def _run_phase_gate(self, phase: int) -> bool:
+        """Pre-phase validation gate (placeholder for 03-02)."""
+        return True
+
+    async def _run_end_of_run_validation(self) -> bool:
+        """Post-run validation (placeholder for 03-03)."""
+        return True

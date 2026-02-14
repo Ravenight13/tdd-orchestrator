@@ -41,6 +41,11 @@ cli.add_command(circuits)
 @click.option("--parallel", "-p", is_flag=True, help="Enable parallel execution")
 @click.option("--workers", "-w", default=2, help="Max parallel workers (default: 2)")
 @click.option("--phase", type=int, default=None, help="Phase to execute (default: all phases)")
+@click.option(
+    "--all-phases",
+    is_flag=True,
+    help="Run all pending phases sequentially with failure gating",
+)
 @click.option("--db", type=click.Path(), help="Database path")
 @click.option("--slack-webhook", envvar="SLACK_WEBHOOK_URL", help="Slack webhook URL")
 @click.option("--max-invocations", default=100, help="Max prompts per session (default: 100)")
@@ -54,6 +59,7 @@ def run(
     parallel: bool,
     workers: int,
     phase: int | None,
+    all_phases: bool,
     db: str | None,
     slack_webhook: str | None,
     max_invocations: int,
@@ -61,11 +67,16 @@ def run(
     multi_branch: bool,
 ) -> None:
     """Run the TDD orchestrator."""
+    if all_phases and phase is not None:
+        click.echo("Error: --all-phases and --phase are mutually exclusive", err=True)
+        sys.exit(1)
+
     # Default to single-branch mode (all workers commit to current branch)
     single_branch = not multi_branch
     asyncio.run(
         _run_async(
-            parallel, workers, phase, db, slack_webhook, max_invocations, local, single_branch
+            parallel, workers, phase, all_phases, db, slack_webhook,
+            max_invocations, local, single_branch,
         )
     )
 
@@ -74,6 +85,7 @@ async def _run_async(
     parallel: bool,
     workers: int,
     phase: int | None,
+    all_phases: bool,
     db_path: str | None,
     slack_webhook: str | None,
     max_invocations: int,
@@ -88,7 +100,10 @@ async def _run_async(
 
     try:
         if parallel:
-            await _run_parallel(db, workers, phase, slack_webhook, max_invocations, local, single_branch)
+            await _run_parallel(
+                db, workers, phase, all_phases, slack_webhook,
+                max_invocations, local, single_branch,
+            )
         else:
             click.echo("Sequential execution not yet implemented")
             click.echo("Use --parallel flag for parallel execution")
@@ -110,6 +125,7 @@ async def _run_parallel(
     db: OrchestratorDB,
     workers: int,
     phase: int | None,
+    all_phases: bool,
     slack_webhook: str | None,
     max_invocations: int,
     local: bool,
@@ -135,7 +151,10 @@ async def _run_parallel(
         slack_webhook_url=slack_webhook,
     )
 
-    result = await pool.run_parallel_phase(phase)
+    if all_phases:
+        result = await pool.run_all_phases()
+    else:
+        result = await pool.run_parallel_phase(phase)
     _print_results(result)
 
     if result.tasks_failed > 0 or result.stopped_reason:
