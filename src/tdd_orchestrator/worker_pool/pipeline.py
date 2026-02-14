@@ -69,11 +69,14 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
     task_type = task.get("task_type", "implement")
     if task_type == "verify-only":
         logger.info("[%s] Task type: verify-only -- skipping RED+GREEN", task_key)
-        return await run_verify_only_pipeline(
+        success = await run_verify_only_pipeline(
             task=task,
             run_stage=ctx.run_stage,
             base_dir=ctx.base_dir,
         )
+        if success:
+            await _run_post_verify_checks(ctx, task)
+        return success
 
     # Resume capability: Check if test file exists from prior run
     test_file_path = Path(test_file) if test_file else None
@@ -213,6 +216,7 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
                 f"feat({task_key}): complete - all checks pass",
                 ctx.base_dir,
             )
+            await _run_post_verify_checks(ctx, task)
         return result.success
 
     # Stage 3.5: REFACTOR (only if VERIFY passed)
@@ -226,6 +230,7 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
             f"feat({task_key}): complete - all checks pass",
             ctx.base_dir,
         )
+        await _run_post_verify_checks(ctx, task)
         return True
 
     # REFACTOR needed
@@ -248,6 +253,7 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
             f"feat({task_key}): complete - all checks pass",
             ctx.base_dir,
         )
+        await _run_post_verify_checks(ctx, task)
         return True
 
     await commit_stage(
@@ -264,6 +270,7 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
             f"feat({task_key}): complete - all checks pass",
             ctx.base_dir,
         )
+        await _run_post_verify_checks(ctx, task)
         return True
 
     # REFACTOR broke something - enter FIX flow
@@ -283,9 +290,32 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
                 f"feat({task_key}): complete - all checks pass",
                 ctx.base_dir,
             )
+            await _run_post_verify_checks(ctx, task)
         return result.success
 
     return False
+
+
+async def _run_post_verify_checks(ctx: PipelineContext, task: dict[str, Any]) -> None:
+    """Run supplemental post-verify checks (non-blocking, log-only)."""
+    task_key = task.get("task_key", "?")
+
+    verify_cmd = task.get("verify_command")
+    if verify_cmd:
+        from .verify_command_runner import run_verify_command
+
+        vc_result = await run_verify_command(str(verify_cmd), ctx.base_dir)
+        if not vc_result.skipped and vc_result.exit_code != 0:
+            logger.warning("[%s] verify_command %s", task_key, vc_result.summary)
+        else:
+            logger.info("[%s] verify_command: %s", task_key, vc_result.summary)
+
+    done_crit = task.get("done_criteria")
+    if done_crit:
+        from .done_criteria_checker import evaluate_criteria
+
+        dc_result = await evaluate_criteria(str(done_crit), task_key, ctx.base_dir)
+        logger.info("[%s] done_criteria: %s", task_key, dc_result.summary)
 
 
 async def _run_green_with_retry(
