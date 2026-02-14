@@ -106,3 +106,5 @@ class ASTCheckConfig:
     check_lambda_iteration: bool = True
     check_unguarded_methods: bool = True
     check_semantic_contradictions: bool = True
+    check_stubs: bool = True
+    check_mock_only_tests: bool = True

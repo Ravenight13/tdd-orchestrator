@@ -27,6 +27,8 @@ from .quality_detectors import (
     PrintDetector,
     SecretDetector,
 )
+from .mock_only_detector import MockOnlyDetector
+from .stub_detector import StubDetector
 from .test_detectors import (
     EmptyAssertionCheck,
     LambdaIterationCheck,
@@ -45,8 +47,10 @@ __all__ = [
     "EmptyAssertionCheck",
     "LambdaIterationCheck",
     "MissingAssertionCheck",
+    "MockOnlyDetector",
     "PrintDetector",
     "SemanticContradictionCheck",
     "SecretDetector",
+    "StubDetector",
     "UnguardedMethodCheck",
 ]

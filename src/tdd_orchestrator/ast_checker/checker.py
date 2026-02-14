@@ -19,6 +19,8 @@ from .quality_detectors import (
     PrintDetector,
     SecretDetector,
 )
+from .mock_only_detector import MockOnlyDetector
+from .stub_detector import StubDetector
 from .test_detectors import (
     EmptyAssertionCheck,
     LambdaIterationCheck,
@@ -125,6 +127,13 @@ class ASTQualityChecker:
             docstring_checker.visit(tree)
             violations.extend(docstring_checker.violations)
 
+        if self.config.check_stubs:
+            stub_detector = StubDetector(source_lines)
+            if file_path.suffix == ".pyi":
+                stub_detector.set_pyi_mode(True)
+            stub_detector.visit(tree)
+            violations.extend(stub_detector.violations)
+
         # RED stage checks (test files only)
         if is_test_file:
             if self.config.check_missing_assertions:
@@ -150,6 +159,11 @@ class ASTQualityChecker:
             if self.config.check_semantic_contradictions:
                 contradiction_check = SemanticContradictionCheck(source_lines)
                 violations.extend(contradiction_check.check(tree))
+
+            if self.config.check_mock_only_tests:
+                mock_checker = MockOnlyDetector(source_lines)
+                mock_checker.visit(tree)
+                violations.extend(mock_checker.violations)
 
         # Run tokenize-based checks (for comments)
         if self.config.check_todos:
