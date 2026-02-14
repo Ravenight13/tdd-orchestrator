@@ -7,10 +7,14 @@ and optional Claude Agent SDK integration stubs.
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..models import Stage
+from ..models import Stage, StageResult
+
+# Type alias for the run_stage callback passed to pipeline functions
+RunStageFunc = Callable[..., Awaitable[StageResult]]
 
 # Stage-specific timeout limits (seconds)
 # Prevents SDK calls from hanging indefinitely

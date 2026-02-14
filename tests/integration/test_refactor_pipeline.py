@@ -81,15 +81,15 @@ class _PipelineHarness:
     async def __aenter__(self) -> "_PipelineHarness":
         static_review = ASTCheckResult(violations=[], is_blocking=False)
         self._patches = [
-            patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", True),
-            patch("tdd_orchestrator.worker_pool.worker.commit_stage", new_callable=AsyncMock),
-            patch("tdd_orchestrator.worker_pool.worker.run_ruff_fix", new_callable=AsyncMock),
+            patch("tdd_orchestrator.worker_pool.pipeline.HAS_AGENT_SDK", True),
+            patch("tdd_orchestrator.worker_pool.pipeline.commit_stage", new_callable=AsyncMock),
+            patch("tdd_orchestrator.worker_pool.pipeline.run_ruff_fix", new_callable=AsyncMock),
             patch(
-                "tdd_orchestrator.worker_pool.worker.check_needs_refactor",
+                "tdd_orchestrator.worker_pool.pipeline.check_needs_refactor",
                 new_callable=AsyncMock, return_value=self._refactor_check,
             ),
             patch(
-                "tdd_orchestrator.worker_pool.worker.run_static_review",
+                "tdd_orchestrator.worker_pool.pipeline.run_static_review",
                 new_callable=AsyncMock, return_value=static_review,
             ),
             patch(
@@ -97,15 +97,15 @@ class _PipelineHarness:
                 new_callable=AsyncMock,
             ),
             patch(
-                "tdd_orchestrator.worker_pool.worker.discover_test_file",
+                "tdd_orchestrator.worker_pool.pipeline.discover_test_file",
                 new_callable=AsyncMock, return_value="tests/test_ref.py",
             ),
             patch.object(
                 self._worker, "_run_stage",
                 new_callable=AsyncMock, side_effect=self._stage_se,
             ),
-            patch.object(
-                self._worker, "_run_green_with_retry",
+            patch(
+                "tdd_orchestrator.worker_pool.pipeline._run_green_with_retry",
                 new_callable=AsyncMock, return_value=_ok(Stage.GREEN),
             ),
             patch.object(

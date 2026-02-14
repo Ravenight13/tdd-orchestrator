@@ -71,7 +71,7 @@ class TestSDKInitialization:
             task = await db.get_task_by_key("TDD-01")
             assert task is not None
 
-            with patch("tdd_orchestrator.worker_pool.worker.HAS_AGENT_SDK", False):
+            with patch("tdd_orchestrator.worker_pool.pipeline.HAS_AGENT_SDK", False):
                 worker = Worker(
                     worker_id=1,
                     db=db,

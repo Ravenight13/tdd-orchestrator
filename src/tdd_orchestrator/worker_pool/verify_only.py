@@ -8,17 +8,14 @@ a dependency task has already implemented the required code.
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from ..models import Stage, StageResult
+from ..models import Stage
+from .config import RunStageFunc
 from .git_ops import commit_stage, run_ruff_fix
 
 logger = logging.getLogger(__name__)
-
-# Type alias for the run_stage callback from Worker
-RunStageFunc = Callable[..., Awaitable[StageResult]]
 
 
 async def run_verify_only_pipeline(
