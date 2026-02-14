@@ -34,9 +34,13 @@ def _make_pool_result(
 
 @pytest.fixture
 def mock_db() -> AsyncMock:
-    """Create a mock database with get_pending_phases."""
+    """Create a mock database with get_pending_phases and phase gate methods."""
     db = AsyncMock()
     db.get_pending_phases = AsyncMock(return_value=[0, 1, 2])
+    db.get_tasks_in_phases_before = AsyncMock(return_value=[])
+    db.get_test_files_from_phases_before = AsyncMock(return_value=[])
+    db.get_all_tasks = AsyncMock(return_value=[])
+    db.update_run_validation = AsyncMock()
     return db
 
 
@@ -234,6 +238,40 @@ class TestRunAllPhasesPlaceholders:
 
         result = await pool.run_all_phases()
         assert result.stopped_reason == "validation_failure"
+
+
+class TestRunAllPhasesPhaseGateConfig:
+    """Tests for phase gate configuration."""
+
+    async def test_enable_phase_gates_false_bypasses_validation(
+        self, mock_db: AsyncMock
+    ) -> None:
+        """enable_phase_gates=False -> all phases execute without gate checks."""
+        config = WorkerConfig(enable_phase_gates=False)
+
+        with patch.object(WorkerPool, "__init__", lambda self, **kw: None):
+            p = WorkerPool.__new__(WorkerPool)
+            p.db = mock_db
+            p.base_dir = Path("/tmp/test")
+            p.config = config
+            p.workers = []
+            p.run_id = 0
+
+        mock_db.get_pending_phases.return_value = [0, 1]
+        call_order: list[int | None] = []
+
+        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+            call_order.append(phase)
+            return _make_pool_result(completed=1, invocations=5)
+
+        p.run_parallel_phase = AsyncMock(side_effect=mock_run_phase)  # type: ignore[method-assign]
+
+        result = await p.run_all_phases()
+
+        assert call_order == [0, 1]
+        assert result.tasks_completed == 2
+        # DB gate methods should NOT have been called
+        mock_db.get_tasks_in_phases_before.assert_not_called()
 
 
 class TestRunAllPhasesNoTasksSkip:

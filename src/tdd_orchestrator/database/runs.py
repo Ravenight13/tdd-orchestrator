@@ -159,6 +159,31 @@ class RunsMixin:
             )
             await self._conn.commit()
 
+    async def update_run_validation(
+        self, run_id: int, validation_status: str, validation_details: str
+    ) -> None:
+        """Store end-of-run validation results.
+
+        Args:
+            run_id: Execution run ID.
+            validation_status: 'passed' or 'failed'.
+            validation_details: JSON string with detailed results.
+        """
+        await self._ensure_connected()
+        if not self._conn:
+            return
+
+        async with self._write_lock:
+            await self._conn.execute(
+                """
+                UPDATE execution_runs
+                SET validation_status = ?, validation_details = ?
+                WHERE id = ?
+                """,
+                (validation_status, validation_details, run_id),
+            )
+            await self._conn.commit()
+
     async def record_invocation(
         self,
         run_id: int,

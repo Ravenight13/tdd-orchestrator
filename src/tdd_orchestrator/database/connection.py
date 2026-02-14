@@ -155,6 +155,9 @@ class ConnectionMixin:
         # Overlap detection: Check for task_type column migration
         await self._migrate_task_type()
 
+        # End-of-run validation columns on execution_runs
+        await self._migrate_run_validation()
+
     async def _migrate_module_exports(self) -> None:
         """Migrate database to add PLAN9 module_exports column if missing.
 
@@ -200,6 +203,30 @@ class ConnectionMixin:
                 )
                 await self._conn.commit()
                 logger.info("task_type column added successfully")
+
+    async def _migrate_run_validation(self) -> None:
+        """Migrate execution_runs to add validation columns if missing.
+
+        Adds validation_status and validation_details for end-of-run
+        validation results. Idempotent and safe to run multiple times.
+        """
+        if not self._conn:
+            return
+
+        try:
+            await self._conn.execute("SELECT validation_status FROM execution_runs LIMIT 1")
+            logger.debug("validation_status column already exists")
+        except Exception:
+            logger.info("Adding validation columns to execution_runs table")
+            async with self._write_lock:
+                await self._conn.execute(
+                    "ALTER TABLE execution_runs ADD COLUMN validation_status TEXT"
+                )
+                await self._conn.execute(
+                    "ALTER TABLE execution_runs ADD COLUMN validation_details TEXT"
+                )
+                await self._conn.commit()
+                logger.info("validation columns added successfully")
 
     # =========================================================================
     # Generic Query/Update Helpers (for testing)

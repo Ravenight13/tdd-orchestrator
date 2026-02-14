@@ -15,6 +15,8 @@ from ..database import OrchestratorDB
 from ..git_coordinator import GitCoordinator
 from ..merge_coordinator import MergeCoordinator
 from .config import PoolResult, WorkerConfig
+from .phase_gate import PhaseGateValidator
+from .run_validator import RunValidator
 from .worker import Worker
 
 logger = logging.getLogger(__name__)
@@ -233,9 +235,22 @@ class WorkerPool:
         return aggregate
 
     async def _run_phase_gate(self, phase: int) -> bool:
-        """Pre-phase validation gate (placeholder for 03-02)."""
-        return True
+        """Validate prior phases before starting this phase."""
+        if not self.config.enable_phase_gates:
+            return True
+        gate = PhaseGateValidator(self.db, self.base_dir)
+        result = await gate.validate_phase(phase)
+        logger.info("Phase gate: %s", result.summary)
+        return result.passed
 
     async def _run_end_of_run_validation(self) -> bool:
-        """Post-run validation (placeholder for 03-03)."""
-        return True
+        """Post-run validation with comprehensive checks."""
+        validator = RunValidator(self.db, self.base_dir)
+        result = await validator.validate_run(self.run_id)
+        await self.db.update_run_validation(
+            self.run_id,
+            "passed" if result.passed else "failed",
+            result.to_json(),
+        )
+        logger.info("End-of-run validation: %s", result.summary)
+        return result.passed
