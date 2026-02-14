@@ -221,6 +221,35 @@ async def setup_project_context(project_root: Path) -> ProjectConfig:
     return config
 
 
+def resolve_db_for_cli(db_override: str | None = None) -> tuple[Path, ProjectConfig | None]:
+    """Resolve database path for CLI commands with auto-discovery fallback.
+
+    Args:
+        db_override: Explicit --db path. If given, skips discovery.
+
+    Returns:
+        (db_path, config). config is None when db_override is used.
+
+    Raises:
+        FileNotFoundError: If no db_override and no .tdd/ found.
+        ValueError: If .tdd/config.toml is corrupt or invalid.
+    """
+    if db_override is not None:
+        return Path(db_override), None
+
+    project_root = find_project_root()
+    if project_root is None:
+        msg = (
+            "No .tdd/ directory found. "
+            "Run 'tdd-orchestrator init' first or use --db."
+        )
+        raise FileNotFoundError(msg)
+
+    config = load_project_config(project_root)
+    db_path = config.resolve_db_path(project_root)
+    return db_path, config
+
+
 def _generate_toml(config: ProjectConfig) -> str:
     """Generate TOML string from a ProjectConfig.
 

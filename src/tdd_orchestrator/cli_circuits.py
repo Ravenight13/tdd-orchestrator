@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
+from pathlib import Path
 from typing import Any
 
 import click
 
 from .database import OrchestratorDB
+from .project_config import resolve_db_for_cli
 
 
 @click.group()
@@ -34,10 +37,15 @@ def circuits() -> None:
 )
 def circuits_status(db: str | None, level: str | None, state: str | None) -> None:
     """Show circuit breaker status."""
-    asyncio.run(_circuits_status_async(db, level, state))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_circuits_status_async(resolved_db_path, level, state))
 
 
-async def _circuits_status_async(db_path: str | None, level: str | None, state: str | None) -> None:
+async def _circuits_status_async(db_path: Path, level: str | None, state: str | None) -> None:
     """Async implementation of circuits status command."""
     db = OrchestratorDB(db_path)
     await db.connect()
@@ -120,10 +128,15 @@ def _print_circuit_status(rows: list[Any]) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 def circuits_health(db: str | None, as_json: bool) -> None:
     """Show circuit breaker health summary."""
-    asyncio.run(_circuits_health_async(db, as_json))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_circuits_health_async(resolved_db_path, as_json))
 
 
-async def _circuits_health_async(db_path: str | None, as_json: bool) -> None:
+async def _circuits_health_async(db_path: Path, as_json: bool) -> None:
     """Async implementation of circuits health command."""
     db = OrchestratorDB(db_path)
     await db.connect()
@@ -288,10 +301,15 @@ def circuits_reset(circuit_id: str, db: str | None, force: bool) -> None:
     CIRCUIT_ID format: level:identifier (e.g., worker:worker_1, stage:TDD-1:green)
     Use 'all' to reset all circuits.
     """
-    asyncio.run(_circuits_reset_async(circuit_id, db, force))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_circuits_reset_async(circuit_id, resolved_db_path, force))
 
 
-async def _circuits_reset_async(circuit_id: str, db_path: str | None, force: bool) -> None:
+async def _circuits_reset_async(circuit_id: str, db_path: Path, force: bool) -> None:
     """Async implementation of circuits reset command."""
     db = OrchestratorDB(db_path)
     await db.connect()

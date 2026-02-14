@@ -7,12 +7,15 @@ and correctly delegates to run_server with the appropriate arguments.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
 
 from tdd_orchestrator.cli import cli
+
+_FAKE_DB = Path("/tmp/fake.db")
 
 
 class TestServeCLICommand:
@@ -22,6 +25,21 @@ class TestServeCLICommand:
     def runner(self) -> CliRunner:
         """Create a Click CLI test runner."""
         return CliRunner()
+
+    @pytest.fixture(autouse=True)
+    def _mock_resolve(self) -> Generator[MagicMock, None, None]:
+        """Auto-mock resolve_db_for_cli so serve doesn't need a real .tdd/."""
+
+        def _resolve(db_override: str | None = None) -> tuple[Path, None]:
+            if db_override is not None:
+                return Path(db_override), None
+            return _FAKE_DB, None
+
+        with patch(
+            "tdd_orchestrator.cli.resolve_db_for_cli",
+            side_effect=_resolve,
+        ) as m:
+            yield m
 
     def test_serve_command_calls_run_server_with_defaults_when_no_arguments(
         self, runner: CliRunner
@@ -34,7 +52,7 @@ class TestServeCLICommand:
             mock_run_server.assert_called_once_with(
                 host="127.0.0.1",
                 port=8420,
-                db_path=None,
+                db_path=_FAKE_DB,
                 reload=False,
                 log_level="info",
             )
@@ -172,17 +190,17 @@ class TestServeCLICommand:
             call_kwargs = mock_run_server.call_args[1]
             assert call_kwargs["reload"] is True
 
-    def test_serve_command_db_path_is_none_when_not_provided(
+    def test_serve_command_db_path_is_resolved_when_not_provided(
         self, runner: CliRunner
     ) -> None:
-        """GIVEN no --db-path WHEN invoking `cli serve` THEN db_path is None."""
+        """GIVEN no --db-path WHEN invoking `cli serve` THEN db_path is auto-discovered."""
         with patch("tdd_orchestrator.cli.run_server") as mock_run_server:
             result = runner.invoke(cli, ["serve"])
 
             assert result.exit_code == 0, f"CLI failed: {result.output}"
             mock_run_server.assert_called_once()
             call_kwargs = mock_run_server.call_args[1]
-            assert call_kwargs["db_path"] is None
+            assert call_kwargs["db_path"] == _FAKE_DB
 
     def test_serve_command_db_path_is_path_object_when_provided(
         self, runner: CliRunner

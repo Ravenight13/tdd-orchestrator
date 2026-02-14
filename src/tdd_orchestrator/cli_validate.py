@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from .database import OrchestratorDB
+from .project_config import resolve_db_for_cli
 from .worker_pool.phase_gate import PhaseGateValidator
 from .worker_pool.run_validator import RunValidator
 
@@ -27,7 +28,12 @@ def validate() -> None:
 @click.option("--db", type=click.Path(), default=None, help="Database path")
 def validate_phase(phase: int, db: str | None) -> None:
     """Run phase gate validation for a specific phase."""
-    asyncio.run(_validate_phase_async(phase, db))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_validate_phase_async(phase, resolved_db_path))
 
 
 @validate.command("run")
@@ -35,17 +41,27 @@ def validate_phase(phase: int, db: str | None) -> None:
 @click.option("--db", type=click.Path(), default=None, help="Database path")
 def validate_run(run_id: int | None, db: str | None) -> None:
     """Run end-of-run validation."""
-    asyncio.run(_validate_run_async(run_id, db))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_validate_run_async(run_id, resolved_db_path))
 
 
 @validate.command("all")
 @click.option("--db", type=click.Path(), default=None, help="Database path")
 def validate_all(db: str | None) -> None:
     """Run all phase gates and end-of-run validation."""
-    asyncio.run(_validate_all_async(db))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_validate_all_async(resolved_db_path))
 
 
-async def _validate_phase_async(phase: int, db_path: str | None) -> None:
+async def _validate_phase_async(phase: int, db_path: Path) -> None:
     """Run phase gate validation for a single phase."""
     db = OrchestratorDB(db_path)
     await db.connect()
@@ -78,7 +94,7 @@ async def _validate_phase_async(phase: int, db_path: str | None) -> None:
         await db.close()
 
 
-async def _validate_run_async(run_id: int | None, db_path: str | None) -> None:
+async def _validate_run_async(run_id: int | None, db_path: Path) -> None:
     """Run end-of-run validation."""
     db = OrchestratorDB(db_path)
     await db.connect()
@@ -111,7 +127,7 @@ async def _validate_run_async(run_id: int | None, db_path: str | None) -> None:
         await db.close()
 
 
-async def _validate_all_async(db_path: str | None) -> None:
+async def _validate_all_async(db_path: Path) -> None:
     """Run all phase gates and end-of-run validation."""
     db = OrchestratorDB(db_path)
     await db.connect()

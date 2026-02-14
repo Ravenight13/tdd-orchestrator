@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from unittest.mock import patch
+
 from tdd_orchestrator.project_config import (
     GitConfig,
     ProjectConfig,
@@ -20,6 +22,7 @@ from tdd_orchestrator.project_config import (
     create_default_config,
     find_project_root,
     load_project_config,
+    resolve_db_for_cli,
     setup_project_context,
 )
 
@@ -345,3 +348,55 @@ class TestSetupProjectContext:
         """Raises FileNotFoundError if .tdd/config.toml missing."""
         with pytest.raises(FileNotFoundError):
             await setup_project_context(tmp_path)
+
+
+class TestResolveDbForCli:
+    """Tests for resolve_db_for_cli()."""
+
+    def test_override_returns_path_and_none_config(self) -> None:
+        """Explicit db_override returns (Path, None)."""
+        db_path, config = resolve_db_for_cli("/some/db")
+        assert db_path == Path("/some/db")
+        assert config is None
+
+    def test_returned_path_is_path_object(self) -> None:
+        """Override string is converted to Path."""
+        db_path, _ = resolve_db_for_cli("/tmp/test.db")
+        assert isinstance(db_path, Path)
+
+    def test_auto_discovers_project(self, tmp_path: Path) -> None:
+        """Auto-discovers .tdd/ and returns resolved path + config."""
+        create_default_config(tmp_path, name="discover-test")
+
+        with patch(
+            "tdd_orchestrator.project_config.find_project_root",
+            return_value=tmp_path,
+        ):
+            db_path, config = resolve_db_for_cli()
+
+        assert config is not None
+        assert config.name == "discover-test"
+        expected = tmp_path.resolve() / ".tdd" / "orchestrator.db"
+        assert db_path == expected
+
+    def test_no_tdd_raises_file_not_found(self) -> None:
+        """No .tdd/ found raises FileNotFoundError."""
+        with patch(
+            "tdd_orchestrator.project_config.find_project_root",
+            return_value=None,
+        ):
+            with pytest.raises(FileNotFoundError, match="No .tdd/ directory found"):
+                resolve_db_for_cli()
+
+    def test_corrupt_config_raises_value_error(self, tmp_path: Path) -> None:
+        """Corrupt config.toml raises ValueError."""
+        tdd_dir = tmp_path / ".tdd"
+        tdd_dir.mkdir()
+        (tdd_dir / "config.toml").write_text("not [valid =", encoding="utf-8")
+
+        with patch(
+            "tdd_orchestrator.project_config.find_project_root",
+            return_value=tmp_path,
+        ):
+            with pytest.raises(ValueError, match="Invalid TOML"):
+                resolve_db_for_cli()

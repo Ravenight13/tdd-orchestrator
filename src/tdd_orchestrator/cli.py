@@ -17,6 +17,7 @@ from .cli_ingest import ingest_command
 from .cli_init import init_command
 from .cli_validate import validate
 from .database import OrchestratorDB
+from .project_config import resolve_db_for_cli
 from .worker_pool import PoolResult, WorkerConfig, WorkerPool
 
 # Configure logging
@@ -45,7 +46,8 @@ cli.add_command(validate)
 
 @cli.command()
 @click.option("--parallel", "-p", is_flag=True, help="Enable parallel execution")
-@click.option("--workers", "-w", default=2, help="Max parallel workers (default: 2)")
+@click.option("--workers", "-w", default=None, type=int,
+              help="Max parallel workers (default: from config or 2)")
 @click.option("--phase", type=int, default=None, help="Phase to execute (default: all phases)")
 @click.option(
     "--all-phases",
@@ -68,7 +70,7 @@ cli.add_command(validate)
 )
 def run(
     parallel: bool,
-    workers: int,
+    workers: int | None,
     phase: int | None,
     all_phases: bool,
     db: str | None,
@@ -83,12 +85,23 @@ def run(
         click.echo("Error: --all-phases and --phase are mutually exclusive", err=True)
         sys.exit(1)
 
+    try:
+        resolved_db_path, config = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    # Resolve workers: CLI > config > default
+    resolved_workers = workers if workers is not None else (
+        config.tdd.max_workers if config else 2
+    )
+
     # Default to single-branch mode (all workers commit to current branch)
     single_branch = not multi_branch
     asyncio.run(
         _run_async(
-            parallel, workers, phase, all_phases, db, slack_webhook,
-            max_invocations, local, single_branch, no_phase_gates,
+            parallel, resolved_workers, phase, all_phases, resolved_db_path,
+            slack_webhook, max_invocations, local, single_branch, no_phase_gates,
         )
     )
 
@@ -98,7 +111,7 @@ async def _run_async(
     workers: int,
     phase: int | None,
     all_phases: bool,
-    db_path: str | None,
+    db_path: Path,
     slack_webhook: str | None,
     max_invocations: int,
     local: bool,
@@ -203,10 +216,15 @@ def _print_results(result: PoolResult) -> None:
 @click.option("--db", type=click.Path(), help="Database path")
 def status(db: str | None) -> None:
     """Show orchestrator status."""
-    asyncio.run(_status_async(db))
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_status_async(resolved_db_path))
 
 
-async def _status_async(db_path: str | None) -> None:
+async def _status_async(db_path: Path) -> None:
     """Async implementation of status command."""
     db = OrchestratorDB(db_path)
     await db.connect()
@@ -263,12 +281,15 @@ def serve(
     log_level: str,
 ) -> None:
     """Start the API server."""
-    # Convert db_path string to Path if provided
-    db_path_obj: Path | None = Path(db_path) if db_path else None
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db_path)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
     run_server(
         host=host,
         port=port,
-        db_path=db_path_obj,
+        db_path=resolved_db_path,
         reload=reload,
         log_level=log_level,
     )
