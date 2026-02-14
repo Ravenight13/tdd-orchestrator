@@ -71,10 +71,14 @@ class TestSSEEndpointBasicStreaming:
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                async with client.stream("GET", "/events") as response:
-                    assert response.status_code == 200
-                    content_type = response.headers.get("content-type", "")
-                    assert "text/event-stream" in content_type
+                # Use wait_for: EventSourceResponse keeps the HTTP connection
+                # alive even after the generator finishes, so client.stream()
+                # would hang indefinitely without a timeout.
+                async with asyncio.timeout(5.0):
+                    async with client.stream("GET", "/events") as response:
+                        assert response.status_code == 200
+                        content_type = response.headers.get("content-type", "")
+                        assert "text/event-stream" in content_type
 
     async def test_get_events_streams_sse_formatted_messages(
         self, app: FastAPI
@@ -233,10 +237,13 @@ class TestSSEEndpointBackpressure:
         ):
             transport = ASGITransport(app=app)
             async with AsyncClient(transport=transport, base_url="http://test") as client:
-                async with client.stream("GET", "/events") as response:
-                    assert response.status_code == 200
-                    content_type = response.headers.get("content-type", "")
-                    assert "text/event-stream" in content_type
+                # Use timeout: EventSourceResponse keeps the HTTP connection
+                # alive even after the generator finishes.
+                async with asyncio.timeout(5.0):
+                    async with client.stream("GET", "/events") as response:
+                        assert response.status_code == 200
+                        content_type = response.headers.get("content-type", "")
+                        assert "text/event-stream" in content_type
 
     async def test_get_events_blocks_on_broadcaster_until_event_arrives(
         self, app: FastAPI
