@@ -11,9 +11,10 @@ import asyncio
 import logging
 import re
 import shlex
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from ..subprocess_utils import resolve_tool
 
 logger = logging.getLogger(__name__)
 
@@ -80,19 +81,6 @@ def parse_verify_command(raw: str) -> tuple[str, tuple[str, ...], str]:
     return tool, tuple(parts[1:]), ""
 
 
-def _resolve_tool(tool_name: str) -> str:
-    """Resolve tool path from the Python interpreter's directory.
-
-    Looks for the tool in the same directory as sys.executable (venv bin),
-    falling back to the bare tool name for PATH resolution.
-    """
-    venv_bin = Path(sys.executable).parent
-    tool_path = venv_bin / tool_name
-    if tool_path.exists():
-        return str(tool_path)
-    return tool_name
-
-
 async def run_verify_command(
     raw: str,
     base_dir: str | Path,
@@ -120,7 +108,7 @@ async def run_verify_command(
             stdout="", stderr="", skipped=True, skip_reason=skip_reason,
         )
 
-    resolved = _resolve_tool(tool)
+    resolved = resolve_tool(tool)
 
     try:
         proc = await asyncio.create_subprocess_exec(

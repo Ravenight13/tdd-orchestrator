@@ -12,7 +12,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from tdd_orchestrator.models import Stage, StageResult
-from tdd_orchestrator.worker_pool.verify_only import run_verify_only_pipeline
+from tdd_orchestrator.worker_pool.verify_only import (
+    _run_post_verify_checks,
+    run_verify_only_pipeline,
+)
 
 
 def _make_task(
@@ -29,6 +32,10 @@ def _make_task(
 
 
 @patch(
+    "tdd_orchestrator.worker_pool.verify_only._run_post_verify_checks",
+    new_callable=AsyncMock,
+)
+@patch(
     "tdd_orchestrator.worker_pool.verify_only.commit_stage",
     new_callable=AsyncMock,
     return_value=True,
@@ -41,6 +48,7 @@ def _make_task(
 async def test_verify_only_passes(
     mock_ruff: AsyncMock,
     mock_commit: AsyncMock,
+    mock_post_checks: AsyncMock,
     tmp_path: Path,
 ) -> None:
     """VERIFY succeeds on first try -> returns True, commits."""
@@ -56,8 +64,13 @@ async def test_verify_only_passes(
     run_stage.assert_called_once_with(Stage.VERIFY, _make_task())
     mock_commit.assert_called_once()
     mock_ruff.assert_called_once()
+    mock_post_checks.assert_called_once()
 
 
+@patch(
+    "tdd_orchestrator.worker_pool.verify_only._run_post_verify_checks",
+    new_callable=AsyncMock,
+)
 @patch(
     "tdd_orchestrator.worker_pool.verify_only.commit_stage",
     new_callable=AsyncMock,
@@ -71,6 +84,7 @@ async def test_verify_only_passes(
 async def test_verify_only_fix_then_pass(
     mock_ruff: AsyncMock,
     mock_commit: AsyncMock,
+    mock_post_checks: AsyncMock,
     tmp_path: Path,
 ) -> None:
     """VERIFY fails with issues -> FIX -> RE_VERIFY passes -> True."""
@@ -93,6 +107,7 @@ async def test_verify_only_fix_then_pass(
     assert run_stage.call_count == 3
     # Two commits: FIX and RE_VERIFY
     assert mock_commit.call_count == 2
+    mock_post_checks.assert_called_once()
 
 
 @patch(
@@ -156,3 +171,61 @@ async def test_verify_only_no_issues(
 
     assert result is False
     run_stage.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _run_post_verify_checks tests
+# ---------------------------------------------------------------------------
+
+
+@patch(
+    "tdd_orchestrator.worker_pool.verify_only.evaluate_criteria",
+    new_callable=AsyncMock,
+)
+@patch(
+    "tdd_orchestrator.worker_pool.verify_only.run_verify_command",
+    new_callable=AsyncMock,
+)
+async def test_post_verify_checks_calls_both(
+    mock_verify_cmd: AsyncMock,
+    mock_eval_criteria: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    """Both verify_command and done_criteria are called when present."""
+    mock_verify_cmd.return_value = AsyncMock(summary="passed (exit 0): pytest tests/")
+    mock_eval_criteria.return_value = AsyncMock(summary="2/2 criteria satisfied")
+
+    task: dict[str, Any] = {
+        "task_key": "T-01",
+        "verify_command": "pytest tests/test_foo.py -v",
+        "done_criteria": "all tests pass; file src/foo.py exists",
+    }
+
+    await _run_post_verify_checks(task, str(tmp_path))
+
+    mock_verify_cmd.assert_called_once_with("pytest tests/test_foo.py -v", str(tmp_path))
+    mock_eval_criteria.assert_called_once_with(
+        "all tests pass; file src/foo.py exists", "T-01", str(tmp_path),
+    )
+
+
+@patch(
+    "tdd_orchestrator.worker_pool.verify_only.evaluate_criteria",
+    new_callable=AsyncMock,
+)
+@patch(
+    "tdd_orchestrator.worker_pool.verify_only.run_verify_command",
+    new_callable=AsyncMock,
+)
+async def test_post_verify_checks_skips_when_absent(
+    mock_verify_cmd: AsyncMock,
+    mock_eval_criteria: AsyncMock,
+    tmp_path: Path,
+) -> None:
+    """Neither function is called when task lacks the fields."""
+    task: dict[str, Any] = {"task_key": "T-02"}
+
+    await _run_post_verify_checks(task, str(tmp_path))
+
+    mock_verify_cmd.assert_not_called()
+    mock_eval_criteria.assert_not_called()

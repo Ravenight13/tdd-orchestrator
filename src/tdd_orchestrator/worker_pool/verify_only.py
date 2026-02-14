@@ -13,9 +13,22 @@ from typing import Any
 
 from ..models import Stage
 from .config import RunStageFunc
+from .done_criteria_checker import evaluate_criteria
 from .git_ops import commit_stage, run_ruff_fix
+from .verify_command_runner import run_verify_command
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_post_verify_checks(task: dict[str, Any], base_dir: str) -> None:
+    """Run verify_command and done_criteria checks (log-only, non-blocking)."""
+    task_key = str(task.get("key", task.get("task_key", "")))
+    if verify_cmd := task.get("verify_command"):
+        result = await run_verify_command(str(verify_cmd), base_dir)
+        logger.info("verify-only post-check verify_command: %s", result.summary)
+    if criteria := task.get("done_criteria"):
+        result_dc = await evaluate_criteria(str(criteria), task_key, base_dir)
+        logger.info("verify-only post-check done_criteria: %s", result_dc.summary)
 
 
 async def run_verify_only_pipeline(
@@ -50,6 +63,7 @@ async def run_verify_only_pipeline(
             f"feat({task_key}): complete (verify-only) - all checks pass",
             base_dir,
         )
+        await _run_post_verify_checks(task, str(base_dir))
         return True
 
     # VERIFY failed -- attempt FIX
@@ -74,4 +88,5 @@ async def run_verify_only_pipeline(
             f"feat({task_key}): complete (verify-only) - all checks pass",
             base_dir,
         )
+        await _run_post_verify_checks(task, str(base_dir))
     return result.success

@@ -113,7 +113,7 @@ class TestRunVerifyCommand:
             new_callable=AsyncMock,
             return_value=mock_proc,
         ), patch(
-            "tdd_orchestrator.worker_pool.verify_command_runner._resolve_tool",
+            "tdd_orchestrator.worker_pool.verify_command_runner.resolve_tool",
             return_value="pytest",
         ):
             result = await run_verify_command("pytest tests/test_foo.py", tmp_path)
@@ -133,7 +133,7 @@ class TestRunVerifyCommand:
             new_callable=AsyncMock,
             return_value=mock_proc,
         ), patch(
-            "tdd_orchestrator.worker_pool.verify_command_runner._resolve_tool",
+            "tdd_orchestrator.worker_pool.verify_command_runner.resolve_tool",
             return_value="pytest",
         ):
             result = await run_verify_command("pytest tests/test_foo.py", tmp_path)
@@ -153,7 +153,7 @@ class TestRunVerifyCommand:
             new_callable=AsyncMock,
             return_value=mock_proc,
         ), patch(
-            "tdd_orchestrator.worker_pool.verify_command_runner._resolve_tool",
+            "tdd_orchestrator.worker_pool.verify_command_runner.resolve_tool",
             return_value="pytest",
         ), patch(
             "tdd_orchestrator.worker_pool.verify_command_runner.asyncio.wait_for",
@@ -181,7 +181,7 @@ class TestRunVerifyCommand:
             "tdd_orchestrator.worker_pool.verify_command_runner.asyncio.create_subprocess_exec",
             side_effect=FileNotFoundError("pytest not found"),
         ), patch(
-            "tdd_orchestrator.worker_pool.verify_command_runner._resolve_tool",
+            "tdd_orchestrator.worker_pool.verify_command_runner.resolve_tool",
             return_value="pytest",
         ):
             result = await run_verify_command("pytest tests/test_foo.py", tmp_path)
@@ -200,7 +200,7 @@ class TestRunVerifyCommand:
             new_callable=AsyncMock,
             return_value=mock_proc,
         ), patch(
-            "tdd_orchestrator.worker_pool.verify_command_runner._resolve_tool",
+            "tdd_orchestrator.worker_pool.verify_command_runner.resolve_tool",
             return_value="pytest",
         ):
             result = await run_verify_command("pytest tests/", tmp_path)

@@ -12,9 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..code_verifier import CodeVerifier
-
 from ..ast_checker import ASTCheckResult, ASTQualityChecker, ASTViolation
+from ..subprocess_utils import resolve_tool
 from ..database import OrchestratorDB
 from .circuit_breakers import StaticReviewCircuitBreaker
 
@@ -173,7 +172,7 @@ async def verify_pytest_collection(test_file: str, base_dir: Path) -> tuple[bool
         Tuple of (success, stderr).
     """
     try:
-        pytest_path = CodeVerifier._resolve_tool("pytest")
+        pytest_path = resolve_tool("pytest")
         proc = await asyncio.create_subprocess_exec(
             pytest_path,
             "--collect-only",

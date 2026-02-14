@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 from pathlib import Path
 
 from .ast_checker import ASTCheckConfig, ASTCheckResult, ASTQualityChecker, ASTViolation
 from .models import VerifyResult
+from .subprocess_utils import resolve_tool
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ class CodeVerifier:
         test_path = self._resolve_path(test_file)
         logger.debug("Running pytest on %s", test_path)
 
-        return await self._run_command(self._resolve_tool("pytest"), str(test_path), "-v", "--tb=short")
+        return await self._run_command(resolve_tool("pytest"), str(test_path), "-v", "--tb=short")
 
     async def run_ruff(self, impl_file: str) -> tuple[bool, str]:
         """Run ruff check on an implementation file.
@@ -99,7 +99,7 @@ class CodeVerifier:
         impl_path = self._resolve_path(impl_file)
         logger.debug("Running ruff check on %s", impl_path)
 
-        return await self._run_command(self._resolve_tool("ruff"), "check", str(impl_path))
+        return await self._run_command(resolve_tool("ruff"), "check", str(impl_path))
 
     async def run_mypy(self, impl_file: str) -> tuple[bool, str]:
         """Run mypy on an implementation file.
@@ -116,7 +116,7 @@ class CodeVerifier:
         impl_path = self._resolve_path(impl_file)
         logger.debug("Running mypy on %s", impl_path)
 
-        return await self._run_command(self._resolve_tool("mypy"), str(impl_path))
+        return await self._run_command(resolve_tool("mypy"), str(impl_path))
 
     async def run_ast_checks(self, impl_file: str) -> ASTCheckResult:
         """Run AST quality checks on implementation file.
@@ -154,7 +154,7 @@ class CodeVerifier:
         logger.debug("Running pytest on sibling files: %s", paths)
 
         return await self._run_command(
-            self._resolve_tool("pytest"), *paths, "-v", "--tb=short"
+            resolve_tool("pytest"), *paths, "-v", "--tb=short"
         )
 
     async def verify_all(self, test_file: str, impl_file: str) -> VerifyResult:
@@ -259,25 +259,6 @@ class CodeVerifier:
         except Exception as e:
             logger.exception("Unexpected error running command %s", args[0])
             return False, f"Unexpected error: {e}"
-
-    @staticmethod
-    def _resolve_tool(tool_name: str) -> str:
-        """Resolve tool path from the Python interpreter's directory.
-
-        Looks for the tool in the same directory as sys.executable (venv bin),
-        falling back to the bare tool name for PATH resolution.
-
-        Args:
-            tool_name: Name of the tool (e.g., "ruff", "mypy", "pytest").
-
-        Returns:
-            Absolute path to the tool if found in venv, otherwise the bare name.
-        """
-        venv_bin = Path(sys.executable).parent
-        tool_path = venv_bin / tool_name
-        if tool_path.exists():
-            return str(tool_path)
-        return tool_name
 
     def _resolve_path(self, file_path: str) -> Path:
         """Resolve a file path relative to base_dir.
