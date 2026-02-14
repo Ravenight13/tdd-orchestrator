@@ -304,6 +304,8 @@ def run_server(
 ) -> None:
     """Run the API server.
 
+    Delegates to the real API server implementation in api.serve.
+
     Args:
         host: Host to bind to
         port: Port to bind to
@@ -311,9 +313,15 @@ def run_server(
         reload: Enable auto-reload on code changes
         log_level: Logging level
     """
-    # This is a stub that will be implemented later
-    # Tests mock this function so it doesn't need real implementation yet
-    pass
+    from tdd_orchestrator.api.serve import run_server as _run_api_server
+
+    _run_api_server(
+        host=host,
+        port=port,
+        db_path=str(db_path) if db_path is not None else None,
+        reload=reload,
+        log_level=log_level,
+    )
 
 
 def main() -> None:

@@ -273,3 +273,61 @@ class TestServeCLICommand:
             mock_run_server.assert_called_once()
             call_kwargs = mock_run_server.call_args[1]
             assert call_kwargs["host"] == "localhost"
+
+
+class TestRunServerDelegation:
+    """Tests that cli.run_server delegates to api.serve.run_server."""
+
+    def test_run_server_delegates_to_api_serve(self) -> None:
+        """GIVEN cli.run_server WHEN called THEN it delegates to api.serve.run_server."""
+        from tdd_orchestrator.cli import run_server
+
+        with patch("tdd_orchestrator.api.serve.run_server") as mock_api_run:
+            run_server(
+                host="0.0.0.0",
+                port=9000,
+                db_path=Path("/tmp/test.db"),
+                reload=True,
+                log_level="debug",
+            )
+
+            mock_api_run.assert_called_once_with(
+                host="0.0.0.0",
+                port=9000,
+                db_path="/tmp/test.db",
+                reload=True,
+                log_level="debug",
+            )
+
+    def test_run_server_converts_path_to_string(self) -> None:
+        """GIVEN db_path as Path WHEN delegating THEN it is converted to str."""
+        from tdd_orchestrator.cli import run_server
+
+        with patch("tdd_orchestrator.api.serve.run_server") as mock_api_run:
+            run_server(
+                host="127.0.0.1",
+                port=8420,
+                db_path=Path("/some/path.db"),
+                reload=False,
+                log_level="info",
+            )
+
+            call_kwargs = mock_api_run.call_args[1]
+            assert call_kwargs["db_path"] == "/some/path.db"
+            assert isinstance(call_kwargs["db_path"], str)
+
+    def test_run_server_passes_none_db_path(self) -> None:
+        """GIVEN db_path is None WHEN delegating THEN None is passed through."""
+        from tdd_orchestrator.cli import run_server
+
+        with patch("tdd_orchestrator.api.serve.run_server") as mock_api_run:
+            run_server(
+                host="127.0.0.1",
+                port=8420,
+                db_path=None,
+                reload=False,
+                log_level="info",
+            )
+
+            call_kwargs = mock_api_run.call_args[1]
+            assert call_kwargs["db_path"] is None
