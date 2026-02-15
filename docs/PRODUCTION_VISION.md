@@ -72,7 +72,7 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 | 6 | **GitHub Actions Integration** | Action that runs `tdd-orchestrator run-prd` on PR creation when PRD file added | P1 |
 | 7 | **Project Registry** | Lightweight registry where running agents register: project name, location, status, task counts | P0 |
 | 8 | **Auth & API Keys** | Bearer token auth for daemon/API mode. Simple, no OAuth unless multi-tenant | P2 |
-| 9 | **SDK / Client Library** | `from tdd_orchestrator.client import OrchestratorClient` — Python client for REST API | P1 |
+| 9 | ~~**SDK / Client Library**~~ | ~~`from tdd_orchestrator.client import OrchestratorClient` — Python client for REST API~~ | ~~P1~~ DONE |
 | 10 | **Plugin Architecture for Workers** | Pluggable workers: Claude, local LLM, human-in-the-loop. Define `Worker` protocol | P2 |
 
 ### III. Frontend Web Dashboard
@@ -82,11 +82,11 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 | 1 | **Tech Stack** | React 19 + Vite + TailwindCSS + shadcn/ui + Recharts + dnd-kit — static build served by daemon | P0 |
 | 2 | **Real-Time Task Board** | Kanban: PENDING -> RED -> GREEN -> VERIFY -> COMPLETE -> FAILED. WebSocket/SSE live updates | P0 |
 | 3 | **Worker Health Panel** | Per-worker circuit breaker state, current task, success/failure rates, heartbeat | P0 |
-| 4 | **Circuit Breaker Dashboard** | 3-level viz: System -> Worker -> Stage. Color-coded, click-through, manual reset | P1 |
+| 4 | ~~**Circuit Breaker Dashboard**~~ | ~~3-level viz: System -> Worker -> Stage. Color-coded, click-through, manual reset~~ | ~~P1~~ DONE |
 | 5 | **Multi-Project Overview** | Top-level page: all registered projects, status, progress bars, last activity | P0 |
-| 6 | **PRD Submission Interface** | Form/drag-drop for PRD files, decomposition preview before execution | P1 |
-| 7 | **Task Detail View** | TDD stage progression, LLM prompts (redacted), test output, code diff, timing | P1 |
-| 8 | **Metrics & Analytics** | Charts: tasks/time, avg time/stage, circuit trip frequency, model usage, cost estimates | P2 |
+| 6 | ~~**PRD Submission Interface**~~ | ~~Form/drag-drop for PRD files, decomposition preview before execution~~ | ~~P1~~ DONE |
+| 7 | ~~**Task Detail View**~~ | ~~TDD stage progression, LLM prompts (redacted), test output, code diff, timing~~ | ~~P1~~ DONE |
+| 8 | ~~**Metrics & Analytics**~~ | ~~Charts: tasks/time, avg time/stage, circuit trip frequency, model usage, cost estimates~~ | ~~P2~~ DONE |
 | 9 | **Server-Sent Events** | SSE from API for unidirectional updates — simpler than WebSocket for monitoring | P0 |
 | 10 | **Embeddable Status Widget** | Iframe/JS widget for GitHub PRs, Slack, team dashboards. Read-only status view | P2 |
 
@@ -137,15 +137,19 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 - Project bootstrap (`init --project`) with `.tdd/config.toml`
 - PRD-to-PR end-to-end pipeline (`run-prd`)
 
-### Phase 3: Web Dashboard — COMPLETE (P0)
+### Phase 3: Web Dashboard — COMPLETE (P0 + P1)
 - React 19 + Vite 6 + Tailwind v4 + TypeScript strict
 - Dashboard page with stats cards, progress ring, task/worker summary
-- Kanban task board (4-column, click-to-retry)
+- Kanban task board (4-column, click-to-retry, dnd-kit drag reorder)
 - Task detail with stage progress bar and attempts timeline
 - Worker panel with heartbeat indicators and stale worker banner
-- Circuit breaker summary cards (stage/worker/system)
+- Circuit breaker summary cards + D3 state machine visualization with events timeline
 - SSE real-time updates with auto-reconnect
 - Static serving at `/app/` with SPA fallback
+- Dark mode with theme toggle + localStorage persistence
+- Recharts analytics charts (attempts-by-stage, task-completion-timeline, invocation-stats)
+- PRD submission interface (form/drag-drop with rate limit + concurrent rejection)
+- Backend tests for all P1 endpoints (53 new tests)
 
 ### Phase 4: Multi-Project Federation — NEXT
 - Project registry

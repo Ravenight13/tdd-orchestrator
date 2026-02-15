@@ -8,7 +8,7 @@ Partially-completed work across sessions. Updated at session end via `/cc-handof
 **Type:** Feature
 **Started:** 2026-02-15
 **Completed:** 2026-02-15
-**Status:** P0 Complete — P1 items deferred
+**Status:** P0 + P1 Complete
 **What's Done:**
 - Phase 3-Pre: Fixed 5 backend bugs (events router, sse-starlette dep, SSE publish path, worker endpoint data, progress status vocab)
 - Phase 3A: Frontend foundation — Vite 6 + React 19 + Tailwind v4 + TypeScript strict, API client, layout shell, routing
@@ -18,14 +18,13 @@ Partially-completed work across sessions. Updated at session end via `/cc-handof
 - Phase 3E: Task detail page — stage progress bar, attempts timeline, retry button
 - Phase 3F: Circuits page — level summary cards (stage/worker/system)
 - Static file serving via `static_files.py` — dashboard at `/app/`, SPA fallback
-- 64 frontend files, 1 new Python file, 5 modified Python files
-- 1813 tests pass, mypy strict (115 files), ruff clean
-**What Remains (P1 deferred):**
-- Dark mode (theme toggle + localStorage + `dark:` variant audit)
-- Recharts charts (metrics/analytics page)
-- D3 circuit breaker state machine visualization
-- PRD submission interface (form/drag-drop)
-- dnd-kit drag reordering within Kanban columns (cosmetic)
+- P1: Dark mode (theme toggle + localStorage + `dark:` variant audit)
+- P1: Recharts analytics charts (attempts-by-stage, task-completion-timeline, invocation-stats)
+- P1: D3 circuit breaker state machine visualization with events timeline
+- P1: PRD submission interface (form/drag-drop with rate limit + concurrent rejection)
+- P1: dnd-kit drag reordering within Kanban columns
+- P1: Backend tests for all new endpoints (analytics ×17, circuit events ×12, PRD ×24, route registration ×3 new + 4 updated)
+- 2197 tests pass, mypy strict (118 files), ruff clean
 
 ### Phase 2: CLI Pipeline
 **Type:** Feature
@@ -98,7 +97,7 @@ Partially-completed work across sessions. Updated at session end via `/cc-handof
 **Completed:** 2026-02-14
 **Status:** Complete
 **What's Done:**
-- 1813 tests passing, 0 warnings, 0 failures
+- 2197 tests passing, 0 failures
 - Dead test removal and hang prevention (timeouts on subprocess and SSE tests)
 - Warning reduction (58 → 0 warnings): renamed TestFileResult→FileTestResult, suppressed AsyncMock/TestRunner collection warnings
 - Coverage gaps filled: circuits routes (23 tests), tasks routes (48 tests), CLI circuits detail (22 tests)
