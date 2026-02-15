@@ -4,6 +4,8 @@ import {
   KanbanSquare,
   Users,
   ShieldCheck,
+  BarChart3,
+  FileText,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +14,8 @@ const NAV_ITEMS = [
   { to: '/tasks', label: 'Tasks', icon: KanbanSquare },
   { to: '/workers', label: 'Workers', icon: Users },
   { to: '/circuits', label: 'Circuits', icon: ShieldCheck },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/prd', label: 'PRD Pipeline', icon: FileText },
 ] as const
 
 export function Sidebar() {

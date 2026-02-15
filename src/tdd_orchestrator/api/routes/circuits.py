@@ -198,3 +198,59 @@ async def reset_circuit_endpoint(
             raise HTTPException(status_code=404, detail=f"Circuit {circuit_id} not found")
         return _circuit_row_to_dict(row)
     raise HTTPException(status_code=503, detail="Database not available")
+
+
+@router.get("/{circuit_id}/events")
+async def get_circuit_events(
+    circuit_id: str,
+    limit: int = 50,
+    db: Any = Depends(get_db_dep),
+) -> dict[str, Any]:
+    """Get recent events for a circuit breaker.
+
+    Args:
+        circuit_id: The circuit ID.
+        limit: Max events to return (default 50).
+        db: Database dependency (injected).
+
+    Returns:
+        Dict with events list.
+
+    Raises:
+        HTTPException: 404 if circuit not found, 503 if DB unavailable.
+    """
+    if db is not None and hasattr(db, "_conn") and db._conn is not None:
+        try:
+            circuit_id_int = int(circuit_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail=f"Circuit {circuit_id} not found")
+
+        # Verify circuit exists
+        async with db._conn.execute(
+            "SELECT id FROM circuit_breakers WHERE id = ?", (circuit_id_int,)
+        ) as cursor:
+            if await cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail=f"Circuit {circuit_id} not found")
+
+        # Fetch events
+        async with db._conn.execute(
+            "SELECT id, event_type, from_state, to_state, created_at, error_context "
+            "FROM circuit_breaker_events WHERE circuit_id = ? "
+            "ORDER BY created_at DESC LIMIT ?",
+            (circuit_id_int, limit),
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        events = [
+            {
+                "id": int(row["id"]),
+                "event_type": str(row["event_type"]),
+                "from_state": str(row["from_state"]) if row["from_state"] else None,
+                "to_state": str(row["to_state"]) if row["to_state"] else None,
+                "created_at": str(row["created_at"]),
+                "error_context": str(row["error_context"]) if row["error_context"] else None,
+            }
+            for row in rows
+        ]
+        return {"events": events}
+    raise HTTPException(status_code=503, detail="Database not available")

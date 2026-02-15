@@ -1,7 +1,7 @@
 """Route registration for FastAPI app.
 
-Wires all route modules (health, tasks, workers, circuits, runs, metrics)
-to the FastAPI app with correct URL prefixes.
+Wires all route modules (health, tasks, workers, circuits, runs, metrics,
+analytics, prd) to the FastAPI app with correct URL prefixes.
 """
 
 from __future__ import annotations
@@ -9,10 +9,12 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from tdd_orchestrator.api.routes import (
+    analytics,
     circuits,
     events,
     health,
     metrics,
+    prd,
     runs,
     tasks,
     workers,
@@ -41,6 +43,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(circuits.router, prefix="/circuits", tags=["circuits"])
     app.include_router(runs.router, prefix="/runs", tags=["runs"])
     app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+    app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
+    app.include_router(prd.router, prefix="/prd", tags=["prd"])
     app.include_router(events.router, tags=["events"])
 
     # Mark routes as registered

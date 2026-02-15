@@ -1,5 +1,10 @@
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
 import { cn } from '@/lib/utils'
-import { TaskCard, TaskCardSkeleton } from './TaskCard'
+import { SortableTaskCard } from './SortableTaskCard'
+import { TaskCardSkeleton } from './TaskCard'
 import type { ColumnDef } from './column-config'
 import type { TaskSummary } from '@/types/api'
 
@@ -16,6 +21,8 @@ export function KanbanColumn({
   loading,
   onRetry,
 }: KanbanColumnProps) {
+  const taskIds = tasks.map((t) => t.id)
+
   return (
     <div className="flex min-w-[260px] flex-col">
       <div
@@ -31,15 +38,17 @@ export function KanbanColumn({
           {tasks.length}
         </span>
       </div>
-      <div className="flex-1 space-y-2 overflow-y-auto">
-        {loading
-          ? Array.from({ length: 3 }).map((_, i) => (
-              <TaskCardSkeleton key={i} />
-            ))
-          : tasks.map((t) => (
-              <TaskCard key={t.id} task={t} onRetry={onRetry} />
-            ))}
-      </div>
+      <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+        <div className="flex-1 space-y-2 overflow-y-auto">
+          {loading
+            ? Array.from({ length: 3 }).map((_, i) => (
+                <TaskCardSkeleton key={i} />
+              ))
+            : tasks.map((t) => (
+                <SortableTaskCard key={t.id} task={t} onRetry={onRetry} />
+              ))}
+        </div>
+      </SortableContext>
     </div>
   )
 }

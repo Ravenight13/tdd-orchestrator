@@ -5,6 +5,8 @@ import { TaskBoardPage } from '@/pages/TaskBoardPage'
 import { TaskDetailPage } from '@/pages/TaskDetailPage'
 import { WorkersPage } from '@/pages/WorkersPage'
 import { CircuitsPage } from '@/pages/CircuitsPage'
+import { AnalyticsPage } from '@/pages/AnalyticsPage'
+import { PrdPage } from '@/pages/PrdPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
         <Route path="/tasks/:taskKey" element={<TaskDetailPage />} />
         <Route path="/workers" element={<WorkersPage />} />
         <Route path="/circuits" element={<CircuitsPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
+        <Route path="/prd" element={<PrdPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AppShell>

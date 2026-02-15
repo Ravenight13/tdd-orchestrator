@@ -21,6 +21,8 @@ export default defineConfig({
       '/health': 'http://localhost:8420',
       '/runs': 'http://localhost:8420',
       '/metrics': 'http://localhost:8420',
+      '/analytics': 'http://localhost:8420',
+      '/prd': 'http://localhost:8420',
     },
   },
 })
