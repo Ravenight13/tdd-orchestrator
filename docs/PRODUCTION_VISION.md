@@ -137,13 +137,17 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 - Project bootstrap (`init --project`) with `.tdd/config.toml`
 - PRD-to-PR end-to-end pipeline (`run-prd`)
 
-### Phase 3: Web Dashboard — NEXT
-- React + Vite + Tailwind setup
-- Task board (Kanban)
-- Worker health panel
-- Circuit breaker visualization
+### Phase 3: Web Dashboard — COMPLETE (P0)
+- React 19 + Vite 6 + Tailwind v4 + TypeScript strict
+- Dashboard page with stats cards, progress ring, task/worker summary
+- Kanban task board (4-column, click-to-retry)
+- Task detail with stage progress bar and attempts timeline
+- Worker panel with heartbeat indicators and stale worker banner
+- Circuit breaker summary cards (stage/worker/system)
+- SSE real-time updates with auto-reconnect
+- Static serving at `/app/` with SPA fallback
 
-### Phase 4: Multi-Project Federation
+### Phase 4: Multi-Project Federation — NEXT
 - Project registry
 - Aggregator API
 - Multi-project dashboard overview

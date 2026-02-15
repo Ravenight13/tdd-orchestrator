@@ -4,6 +4,29 @@ Partially-completed work across sessions. Updated at session end via `/cc-handof
 
 ---
 
+### Phase 3: Web Dashboard (React)
+**Type:** Feature
+**Started:** 2026-02-15
+**Completed:** 2026-02-15
+**Status:** P0 Complete — P1 items deferred
+**What's Done:**
+- Phase 3-Pre: Fixed 5 backend bugs (events router, sse-starlette dep, SSE publish path, worker endpoint data, progress status vocab)
+- Phase 3A: Frontend foundation — Vite 6 + React 19 + Tailwind v4 + TypeScript strict, API client, layout shell, routing
+- Phase 3B: Dashboard page — stats cards, progress ring, task list, worker summary
+- Phase 3C: Kanban task board — 4-column layout (PENDING/IN PROGRESS/PASSED/FAILED), click-to-retry
+- Phase 3D: SSE hook with auto-reconnect + exponential backoff, worker panel with heartbeat indicators + stale banner
+- Phase 3E: Task detail page — stage progress bar, attempts timeline, retry button
+- Phase 3F: Circuits page — level summary cards (stage/worker/system)
+- Static file serving via `static_files.py` — dashboard at `/app/`, SPA fallback
+- 64 frontend files, 1 new Python file, 5 modified Python files
+- 1813 tests pass, mypy strict (115 files), ruff clean
+**What Remains (P1 deferred):**
+- Dark mode (theme toggle + localStorage + `dark:` variant audit)
+- Recharts charts (metrics/analytics page)
+- D3 circuit breaker state machine visualization
+- PRD submission interface (form/drag-drop)
+- dnd-kit drag reordering within Kanban columns (cosmetic)
+
 ### Phase 2: CLI Pipeline
 **Type:** Feature
 **Started:** 2026-02-05
@@ -86,8 +109,8 @@ Partially-completed work across sessions. Updated at session end via `/cc-handof
 **Resolved:**
 - ASGI Framework: **FastAPI** (pyproject.toml `[project.optional-dependencies] api`)
 - PRD Format: **Markdown primary**, extensible via parser
+- Dashboard hosting: **Served by daemon** — static build at `/app/` via `static_files.py`
 **Still Open:**
-- Dashboard hosting: served by daemon or separate static deployment? (Phase 3)
 - Registry storage: SQLite, JSON, or lightweight service? (Phase 4)
 - Auth model: API keys sufficient or need JWT/OAuth? (Phase 5)
 - Task DAG encoding in decomposition output (Phase 4)
