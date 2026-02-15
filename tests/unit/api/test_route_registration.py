@@ -1,7 +1,8 @@
 """Tests for route registration functionality.
 
 Tests the register_routes() function that wires all route modules
-(health, tasks, workers, circuits, runs, metrics) to a FastAPI app.
+(health, tasks, workers, circuits, runs, metrics, analytics, prd, events)
+to a FastAPI app.
 """
 
 from __future__ import annotations
@@ -76,14 +77,47 @@ class TestRegisterRoutesModuleInclusion:
 
         assert len(metrics_routes) > 0, "Expected at least one /metrics route"
 
-    def test_registers_all_six_modules_when_called(self) -> None:
-        """GIVEN a fresh FastAPI app WHEN register_routes is called THEN all six modules are registered."""
+    def test_registers_analytics_routes_when_called(self) -> None:
+        """GIVEN a fresh FastAPI app WHEN register_routes is called THEN analytics routes are included."""
+        app = FastAPI()
+        register_routes(app)
+
+        route_paths = [route.path for route in app.routes if hasattr(route, "path")]
+        analytics_routes = [p for p in route_paths if p.startswith("/analytics")]
+
+        assert len(analytics_routes) > 0, "Expected at least one /analytics route"
+
+    def test_registers_prd_routes_when_called(self) -> None:
+        """GIVEN a fresh FastAPI app WHEN register_routes is called THEN prd routes are included."""
+        app = FastAPI()
+        register_routes(app)
+
+        route_paths = [route.path for route in app.routes if hasattr(route, "path")]
+        prd_routes = [p for p in route_paths if p.startswith("/prd")]
+
+        assert len(prd_routes) > 0, "Expected at least one /prd route"
+
+    def test_registers_events_routes_when_called(self) -> None:
+        """GIVEN a fresh FastAPI app WHEN register_routes is called THEN events routes are included."""
+        app = FastAPI()
+        register_routes(app)
+
+        route_paths = [route.path for route in app.routes if hasattr(route, "path")]
+        events_routes = [p for p in route_paths if p.startswith("/events")]
+
+        assert len(events_routes) > 0, "Expected at least one /events route"
+
+    def test_registers_all_nine_modules_when_called(self) -> None:
+        """GIVEN a fresh FastAPI app WHEN register_routes is called THEN all nine modules are registered."""
         app = FastAPI()
         register_routes(app)
 
         route_paths = [route.path for route in app.routes if hasattr(route, "path")]
 
-        expected_prefixes = ["/health", "/tasks", "/workers", "/circuits", "/runs", "/metrics"]
+        expected_prefixes = [
+            "/health", "/tasks", "/workers", "/circuits", "/runs", "/metrics",
+            "/analytics", "/prd", "/events",
+        ]
         for prefix in expected_prefixes:
             matching_routes = [p for p in route_paths if p.startswith(prefix)]
             assert len(matching_routes) > 0, f"Expected at least one route with prefix {prefix}"
@@ -135,6 +169,9 @@ class TestRegisterRoutesCorrectPrefixes:
             "/circuits": "circuits",
             "/runs": "runs",
             "/metrics": "metrics",
+            "/analytics": "analytics",
+            "/prd": "prd",
+            "/events": "events",
         }
 
         for prefix, module_name in prefix_map.items():
@@ -244,7 +281,10 @@ class TestRegisterRoutesIdempotency:
     def test_each_prefix_route_count_stable_after_multiple_calls(self) -> None:
         """GIVEN register_routes called multiple times THEN each prefix route count is stable."""
         app = FastAPI()
-        prefixes = ["/health", "/tasks", "/workers", "/circuits", "/runs", "/metrics"]
+        prefixes = [
+            "/health", "/tasks", "/workers", "/circuits", "/runs", "/metrics",
+            "/analytics", "/prd", "/events",
+        ]
 
         register_routes(app)
         counts_first: dict[str, int] = {}
