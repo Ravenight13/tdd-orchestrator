@@ -15,6 +15,7 @@ import click
 from .cli_circuits import circuits
 from .cli_ingest import ingest_command
 from .cli_init import init_command
+from .cli_init_prd import init_prd_command
 from .cli_run_prd import run_prd_command
 from .cli_validate import validate
 from .database import OrchestratorDB
@@ -42,6 +43,7 @@ def cli(verbose: bool) -> None:
 cli.add_command(circuits)
 cli.add_command(ingest_command)
 cli.add_command(init_command)
+cli.add_command(init_prd_command)
 cli.add_command(run_prd_command)
 cli.add_command(validate)
 
