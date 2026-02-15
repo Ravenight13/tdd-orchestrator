@@ -104,6 +104,17 @@ class TestAppLifecycleShutdown:
             # After exiting the context, shutdown should have been called
             mock_shutdown.assert_called_once()
 
+        # Mocked shutdown skipped real cleanup — close the leaked DB connection
+        # to prevent SQLite write-lock contention in subsequent tests
+        from tdd_orchestrator.api.dependencies import (
+            _db_instance,
+            shutdown_dependencies as sync_shutdown,
+        )
+
+        if _db_instance is not None and hasattr(_db_instance, "close"):
+            await _db_instance.close()
+        sync_shutdown()
+
     @pytest.mark.asyncio
     async def test_shutdown_releases_resources_without_warnings(self) -> None:
         """GIVEN create_app() produced a running app

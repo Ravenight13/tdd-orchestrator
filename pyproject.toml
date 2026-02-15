@@ -55,3 +55,7 @@ markers = [
     "regression: marks tests as regression tests",
     "slow: marks tests as slow-running",
 ]
+filterwarnings = [
+    # aiosqlite background thread races against event loop closure in CPython 3.13
+    "ignore:Exception in thread.*_connection_worker_thread:pytest.PytestUnhandledThreadExceptionWarning",
+]
