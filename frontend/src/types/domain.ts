@@ -1,0 +1,6 @@
+export type TaskStatus = 'pending' | 'running' | 'passed' | 'failed'
+export type Complexity = 'low' | 'medium' | 'high'
+export type CircuitLevel = 'stage' | 'worker' | 'system'
+export type CircuitState = 'closed' | 'open' | 'half_open'
+export type WorkerStatus = 'active' | 'idle' | 'dead'
+export type RunStatus = 'pending' | 'running' | 'completed' | 'failed'

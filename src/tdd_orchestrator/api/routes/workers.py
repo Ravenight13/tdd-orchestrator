@@ -63,7 +63,8 @@ async def get_workers(db: Any = Depends(get_db_dep)) -> dict[str, Any]:
     """
     if db is not None and hasattr(db, "_conn") and db._conn is not None:
         async with db._conn.execute(
-            "SELECT worker_id, status, registered_at FROM workers ORDER BY registered_at"
+            "SELECT worker_id, status, registered_at, last_heartbeat,"
+            " current_task_id, branch_name FROM workers ORDER BY registered_at"
         ) as cursor:
             rows = await cursor.fetchall()
         workers = [
@@ -71,6 +72,15 @@ async def get_workers(db: Any = Depends(get_db_dep)) -> dict[str, Any]:
                 "id": str(row["worker_id"]),
                 "status": str(row["status"]),
                 "registered_at": str(row["registered_at"]),
+                "last_heartbeat": (
+                    str(row["last_heartbeat"]) if row["last_heartbeat"] else None
+                ),
+                "current_task_id": (
+                    int(row["current_task_id"]) if row["current_task_id"] else None
+                ),
+                "branch_name": (
+                    str(row["branch_name"]) if row["branch_name"] else None
+                ),
             }
             for row in rows
         ]
@@ -93,6 +103,23 @@ async def get_stale_workers(db: Any = Depends(get_db_dep)) -> dict[str, Any]:
                 "id": str(row["worker_id"]),
                 "status": str(row["status"]),
                 "registered_at": str(row["registered_at"]),
+                "last_heartbeat": (
+                    str(row["last_heartbeat"]) if row["last_heartbeat"] else None
+                ),
+                "current_task_id": (
+                    int(row["current_task_id"]) if row["current_task_id"] else None
+                ),
+                "branch_name": (
+                    str(row["branch_name"]) if row["branch_name"] else None
+                ),
+                "minutes_since_heartbeat": (
+                    int(row["minutes_since_heartbeat"])
+                    if row["minutes_since_heartbeat"] is not None
+                    else None
+                ),
+                "current_task_key": (
+                    str(row["current_task_key"]) if row["current_task_key"] else None
+                ),
             }
             for row in rows
         ]
@@ -118,7 +145,8 @@ async def get_worker(
     if db is not None and hasattr(db, "_conn") and db._conn is not None:
         param: int | str = int(worker_id) if worker_id.isdigit() else worker_id
         async with db._conn.execute(
-            "SELECT worker_id, status, registered_at FROM workers WHERE worker_id = ?",
+            "SELECT worker_id, status, registered_at, last_heartbeat,"
+            " current_task_id, branch_name FROM workers WHERE worker_id = ?",
             (param,),
         ) as cursor:
             row = await cursor.fetchone()
@@ -127,6 +155,15 @@ async def get_worker(
                 "id": str(row["worker_id"]),
                 "status": str(row["status"]),
                 "registered_at": str(row["registered_at"]),
+                "last_heartbeat": (
+                    str(row["last_heartbeat"]) if row["last_heartbeat"] else None
+                ),
+                "current_task_id": (
+                    int(row["current_task_id"]) if row["current_task_id"] else None
+                ),
+                "branch_name": (
+                    str(row["branch_name"]) if row["branch_name"] else None
+                ),
             }
         raise HTTPException(status_code=404, detail="Worker not found")
     worker = get_worker_by_id(worker_id)

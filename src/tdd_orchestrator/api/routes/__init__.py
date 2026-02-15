@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from tdd_orchestrator.api.routes import (
     circuits,
+    events,
     health,
     metrics,
     runs,
@@ -40,6 +41,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(circuits.router, prefix="/circuits", tags=["circuits"])
     app.include_router(runs.router, prefix="/runs", tags=["runs"])
     app.include_router(metrics.router, prefix="/metrics", tags=["metrics"])
+    app.include_router(events.router, tags=["events"])
 
     # Mark routes as registered
     app._routes_registered = True  # type: ignore[attr-defined]

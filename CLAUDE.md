@@ -14,6 +14,7 @@ tdd-orchestrator init               # Initialize database
 tdd-orchestrator health             # Check health
 tdd-orchestrator run -p -w 2        # Run with 2 parallel workers
 tdd-orchestrator serve              # Start API server
+tdd-orchestrator init-prd --name X  # Scaffold PRD template
 tdd-orchestrator run-prd <file>     # End-to-end PRD pipeline
 ```
 

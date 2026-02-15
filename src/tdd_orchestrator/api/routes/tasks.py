@@ -1,5 +1,6 @@
 """Tasks router for listing tasks with filtering and pagination."""
 
+import json
 from enum import Enum
 from typing import Any
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from tdd_orchestrator.api.dependencies import get_broadcaster_dep, get_db_dep
 from tdd_orchestrator.api.models.responses import StatsResponse
+from tdd_orchestrator.api.sse import SSEEvent
 
 router = APIRouter()
 
@@ -181,6 +183,17 @@ async def get_progress(db: Any = Depends(get_db_dep)) -> dict[str, Any]:
     """
     if db is not None and hasattr(db, "_conn") and db._conn is not None:
         progress: dict[str, Any] = await db.get_progress()
+        # Map DB status keys to API vocabulary for consistency
+        raw_by_status = progress.get("by_status", {})
+        mapped_by_status: dict[str, int] = {
+            "pending": int(raw_by_status.get("pending", 0)),
+            "running": int(raw_by_status.get("in_progress", 0)),
+            "passed": int(raw_by_status.get("passing", 0))
+            + int(raw_by_status.get("complete", 0)),
+            "failed": int(raw_by_status.get("blocked", 0))
+            + int(raw_by_status.get("blocked-static-review", 0)),
+        }
+        progress["by_status"] = mapped_by_status
         return progress
     raise HTTPException(status_code=503, detail="Database not available")
 
@@ -271,13 +284,11 @@ async def retry_task_endpoint(
         await db.update_task_status(task_key, "pending")
 
         try:
-            await broadcaster.publish(
-                {
-                    "event": "task_status_changed",
-                    "task_key": task_key,
-                    "status": "pending",
-                }
+            sse_event = SSEEvent(
+                event="task_status_changed",
+                data=json.dumps({"task_key": task_key, "status": "pending"}),
             )
+            await broadcaster.publish(sse_event)
         except Exception:
             pass
 

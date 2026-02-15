@@ -49,24 +49,24 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 
 | # | Idea | Description | Priority |
 |---|------|-------------|----------|
-| 1 | **PRD Intake Command** | `tdd-orchestrator ingest <prd-file>` — accepts PRD files (MD/YAML/JSON) and feeds into 4-pass decomposition pipeline | P0 |
-| 2 | **PRD Template System** | `tdd-orchestrator init-prd` — ships opinionated templates aligned with decomposition expectations | P1 |
-| 3 | **Project Bootstrap** | `tdd-orchestrator init --project /path/to/target` — creates `.tdd/` directory with config, DB, task definitions | P0 |
+| 1 | ~~**PRD Intake Command**~~ | ~~`tdd-orchestrator ingest <prd-file>` — accepts PRD files (MD/YAML/JSON) and feeds into 4-pass decomposition pipeline~~ | ~~P0~~ DONE |
+| 2 | ~~**PRD Template System**~~ | ~~`tdd-orchestrator init-prd` — ships opinionated templates aligned with decomposition expectations~~ | ~~P1~~ DONE |
+| 3 | ~~**Project Bootstrap**~~ | ~~`tdd-orchestrator init --project /path/to/target` — creates `.tdd/` directory with config, DB, task definitions~~ | ~~P0~~ DONE |
 | 4 | **Language-Agnostic Execution** | Pluggable `TestRunner` protocol — adapters for pytest, jest, cargo test, go test, etc. | P1 |
 | 5 | **Git Integration as Default** | Auto-create feature branches per PRD, per-task branches, auto-merge on GREEN | P0 |
-| 6 | **PRD-to-PR Pipeline** | `tdd-orchestrator run-prd <file> --target /path` — end-to-end: ingest, decompose, TDD, open PR | P0 |
+| 6 | ~~**PRD-to-PR Pipeline**~~ | ~~`tdd-orchestrator run-prd <file> --target /path` — end-to-end: ingest, decompose, TDD, open PR~~ | ~~P0~~ DONE |
 | 7 | **Dry-Run / Preview Mode** | `tdd-orchestrator decompose <prd> --dry-run` — shows task breakdown without executing | P1 |
 | 8 | **Task Dependency Graph** | Decomposition outputs DAG, not flat list; worker pool respects dependency edges | P1 |
-| 9 | **Per-Project Configuration** | `.tdd/config.toml` — language, test framework, source layout, branch strategy, model prefs | P0 |
+| 9 | ~~**Per-Project Configuration**~~ | ~~`.tdd/config.toml` — language, test framework, source layout, branch strategy, model prefs~~ | ~~P0~~ DONE |
 | 10 | **Checkpoint & Resume** | `tdd-orchestrator resume` — picks up from last completed task after failure/stop | P1 |
 
 ### II. Deployment & Integration as a Service
 
 | # | Idea | Description | Priority |
 |---|------|-------------|----------|
-| 1 | **Daemon Mode** | `tdd-orchestrator serve --port 8420` — runs as local daemon with REST API via ASGI framework | P0 |
-| 2 | **Per-Project Agent Model** | Each project installs as dev dependency, runs locally. No centralized server required | P0 |
-| 3 | **REST API Layer** | Endpoints: `POST /prd`, `GET /tasks`, `POST /tasks/{id}/retry`, `GET /health`, `GET /metrics`, `WS /events` | P0 |
+| 1 | ~~**Daemon Mode**~~ | ~~`tdd-orchestrator serve --port 8420` — runs as local daemon with REST API via ASGI framework~~ | ~~P0~~ DONE |
+| 2 | ~~**Per-Project Agent Model**~~ | ~~Each project installs as dev dependency, runs locally. No centralized server required~~ | ~~P0~~ DONE |
+| 3 | ~~**REST API Layer**~~ | ~~Endpoints: `POST /prd`, `GET /tasks`, `POST /tasks/{id}/retry`, `GET /health`, `GET /metrics`, `WS /events`~~ | ~~P0~~ DONE |
 | 4 | **Webhook / Event System** | Generalize `hooks.py` + `notifications.py` to emit events on state changes; external subscribers | P1 |
 | 5 | **Docker Packaging** | `docker run tdd-orchestrator --mount` — packages with all deps. Include `docker-compose.yml` | P2 |
 | 6 | **GitHub Actions Integration** | Action that runs `tdd-orchestrator run-prd` on PR creation when PRD file added | P1 |
@@ -79,7 +79,7 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 
 | # | Idea | Description | Priority |
 |---|------|-------------|----------|
-| 1 | **Tech Stack** | React + Vite + TailwindCSS — lightweight, static build served by daemon | P0 |
+| 1 | **Tech Stack** | React 19 + Vite + TailwindCSS + shadcn/ui + Recharts + dnd-kit — static build served by daemon | P0 |
 | 2 | **Real-Time Task Board** | Kanban: PENDING -> RED -> GREEN -> VERIFY -> COMPLETE -> FAILED. WebSocket/SSE live updates | P0 |
 | 3 | **Worker Health Panel** | Per-worker circuit breaker state, current task, success/failure rates, heartbeat | P0 |
 | 4 | **Circuit Breaker Dashboard** | 3-level viz: System -> Worker -> Stage. Color-coded, click-through, manual reset | P1 |
@@ -127,19 +127,17 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 
 ## Implementation Phases (High Level)
 
-### Phase 1: API Layer (The One Thing)
-- ASGI framework (Litestar or FastAPI) wrapping existing engine
-- REST endpoints for tasks, health, metrics
+### Phase 1: API Layer — COMPLETE
+- FastAPI wrapping existing engine (20+ REST endpoints)
 - SSE for real-time updates
-- `tdd-orchestrator serve` command
+- `tdd-orchestrator serve` command (port 8420)
 
-### Phase 2: PRD Pipeline
-- PRD intake command and templates
-- Project bootstrap (`init --project`)
-- Per-project `.tdd/config.toml`
-- PRD-to-PR end-to-end pipeline
+### Phase 2: PRD Pipeline — COMPLETE
+- PRD intake command (`ingest`) and template scaffolding (`init-prd`)
+- Project bootstrap (`init --project`) with `.tdd/config.toml`
+- PRD-to-PR end-to-end pipeline (`run-prd`)
 
-### Phase 3: Web Dashboard
+### Phase 3: Web Dashboard — NEXT
 - React + Vite + Tailwind setup
 - Task board (Kanban)
 - Worker health panel
@@ -161,11 +159,11 @@ TDD Orchestrator is a parallel task execution engine for TDD workflows. Today it
 
 ## Open Questions
 
-1. **ASGI Framework:** Litestar vs FastAPI? (Litestar is more modern, FastAPI has larger ecosystem)
-2. **Dashboard hosting:** Served by daemon, or separate static deployment?
+1. ~~**ASGI Framework:** Litestar vs FastAPI?~~ — **Resolved: FastAPI** (2026-02-07)
+2. ~~**Dashboard hosting:** Served by daemon, or separate static deployment?~~ — **Resolved: Served by daemon** (2026-02-14)
 3. **Registry storage:** SQLite file, JSON file, or its own lightweight service?
 4. **Auth model:** API keys sufficient, or need JWT/OAuth for team use?
-5. **PRD format:** Markdown-only, or support YAML/JSON structured formats?
+5. ~~**PRD format:** Markdown-only, or support YAML/JSON structured formats?~~ — **Resolved: Markdown primary** (2026-02-07)
 6. **Task DAG:** How to encode dependencies in the decomposition output?
 
 ---

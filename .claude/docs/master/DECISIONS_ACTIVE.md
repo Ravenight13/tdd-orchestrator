@@ -70,6 +70,12 @@ Current governing decisions for TDD Orchestrator. Single source of truth — if 
 **Rationale:** Critical phases (RED, decomposition) need highest capability. Cost optimization for simpler tasks. Escalation pattern for retries maximizes success rate.
 **Would Revisit If:** Model pricing changes significantly, or new model tiers are released.
 
+### [2026-02-14] React 19 + Vite + Tailwind + shadcn/ui for Web Dashboard
+**Confidence:** HIGH
+**Decision:** Phase 3 Web Dashboard uses React 19 + Vite + TailwindCSS + shadcn/ui. Charting via Recharts (bundled with shadcn/ui charts). Kanban drag-and-drop via dnd-kit. Circuit breaker state machine viz via D3.js. Static build served by FastAPI daemon.
+**Rationale:** Evaluated React, Vue 3, Svelte 5, Preact, HTMX+Alpine, Solid.js, Lit, and Python frontends (Reflex, NiceGUI, Streamlit, Gradio). React won on: best dashboard component ecosystem, strongest AI code generation support, most mature Kanban/charting libraries. Bundle size irrelevant for local daemon. Python frontends eliminated (no static build). Svelte ecosystem too immature (LayerChart pre-release). Vue strong runner-up but React's shadcn/ui + dnd-kit combo is unmatched.
+**Would Revisit If:** shadcn/ui development stalls, or Vue PrimeVue ecosystem surpasses React dashboard tooling.
+
 ### [2026-01-15] mypy Strict + ruff for Quality Gates
 **Confidence:** HIGH
 **Decision:** mypy with `strict = true` and ruff for linting. Both must pass before commits.

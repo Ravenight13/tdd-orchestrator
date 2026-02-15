@@ -38,5 +38,9 @@ _orchestrator_archived/
 # Generated artifacts
 tdd-progress.md
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 # OS
 .DS_Store

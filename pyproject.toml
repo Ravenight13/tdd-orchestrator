@@ -26,6 +26,7 @@ api = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
+    "sse-starlette>=2.0",
 ]
 
 [project.scripts]

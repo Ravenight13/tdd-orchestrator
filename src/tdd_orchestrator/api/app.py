@@ -28,12 +28,19 @@ def _create_task_status_callback() -> Callable[[dict[str, Any]], None]:
     Returns:
         A callback that publishes events through the broadcaster.
     """
+    import json as _json
+
+    from tdd_orchestrator.api.sse import SSEEvent
 
     def on_task_status_change(event: dict[str, Any]) -> None:
         """Callback invoked when task status changes."""
         if _broadcaster is not None:
             try:
-                _broadcaster.publish(event)
+                sse_event = SSEEvent(
+                    event="task_status_changed",
+                    data=_json.dumps(event),
+                )
+                _broadcaster.publish(sse_event)
             except Exception:
                 # Silently catch exceptions to prevent app crashes
                 pass
@@ -273,5 +280,10 @@ def create_app() -> FastAPI:
     _configure_cors(app)
     _register_error_handlers(app)
     _register_routes(app)
+
+    # Mount dashboard SPA (no-op if frontend/dist/ doesn't exist)
+    from tdd_orchestrator.api.static_files import mount_dashboard
+
+    mount_dashboard(app)
 
     return app

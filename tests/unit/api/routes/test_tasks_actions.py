@@ -230,13 +230,19 @@ class TestRetryTaskSuccess:
         self, mock_db: MagicMock, mock_broadcaster: AsyncMock
     ) -> None:
         """POST /tasks/TDD-05-01/retry publishes SSE event."""
+        import json
+
+        from tdd_orchestrator.api.sse import SSEEvent
+
         client = TestClient(_make_app(mock_db, mock_broadcaster))
         client.post("/tasks/TDD-05-01/retry")
         mock_broadcaster.publish.assert_awaited_once()
         call_args = mock_broadcaster.publish.call_args[0][0]
-        assert call_args["event"] == "task_status_changed"
-        assert call_args["task_key"] == "TDD-05-01"
-        assert call_args["status"] == "pending"
+        assert isinstance(call_args, SSEEvent)
+        assert call_args.event == "task_status_changed"
+        data = json.loads(call_args.data)
+        assert data["task_key"] == "TDD-05-01"
+        assert data["status"] == "pending"
 
 
 class TestRetryTaskNotFound:

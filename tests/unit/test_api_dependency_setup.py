@@ -86,16 +86,16 @@ class TestApiDependencyConfiguration:
             f"Expected 'pydantic' in api dependencies, got: {api_deps}"
         )
 
-    def test_api_extra_has_exactly_three_packages(
+    def test_api_extra_has_exactly_four_packages(
         self, pyproject_data: dict
     ) -> None:
-        """Test that [api] extra has exactly 3 packages."""
+        """Test that [api] extra has exactly 4 packages."""
         optional_deps = pyproject_data.get("project", {}).get(
             "optional-dependencies", {}
         )
         api_deps = optional_deps.get("api", [])
-        assert len(api_deps) == 3, (
-            f"Expected exactly 3 packages in api extra, got {len(api_deps)}: {api_deps}"
+        assert len(api_deps) == 4, (
+            f"Expected exactly 4 packages in api extra, got {len(api_deps)}: {api_deps}"
         )
 
 

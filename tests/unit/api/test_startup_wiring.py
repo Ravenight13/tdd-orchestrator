@@ -188,10 +188,18 @@ class TestTaskStatusChangeTriggersSseEvent:
                     }
                     captured_callback[0](event)
 
-            # Verify the published event contains task_id
+            # Verify the published SSEEvent contains task_id in its JSON data
             if published_events:
-                assert "task_id" in published_events[0]
-                assert published_events[0]["task_id"] == "task-456"
+                import json
+
+                from tdd_orchestrator.api.sse import SSEEvent
+
+                sse_event = published_events[0]
+                assert isinstance(sse_event, SSEEvent)
+                assert sse_event.event == "task_status_changed"
+                data = json.loads(sse_event.data)
+                assert "task_id" in data
+                assert data["task_id"] == "task-456"
             else:
                 # If no events captured, callback registration should have happened
                 assert len(captured_callback) >= 1
@@ -244,8 +252,16 @@ class TestTaskStatusChangeTriggersSseEvent:
                     captured_callback[0](event)
 
             if published_events:
-                assert "new_status" in published_events[0]
-                assert published_events[0]["new_status"] == "completed"
+                import json
+
+                from tdd_orchestrator.api.sse import SSEEvent
+
+                sse_event = published_events[0]
+                assert isinstance(sse_event, SSEEvent)
+                assert sse_event.event == "task_status_changed"
+                data = json.loads(sse_event.data)
+                assert "new_status" in data
+                assert data["new_status"] == "completed"
             else:
                 assert len(captured_callback) >= 1
 
