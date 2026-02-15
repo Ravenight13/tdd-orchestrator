@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from .cli_circuits import circuits
+from .cli_decompose import decompose_command
 from .cli_ingest import ingest_command
 from .cli_init import init_command
 from .cli_init_prd import init_prd_command
@@ -41,6 +42,7 @@ def cli(verbose: bool) -> None:
 
 # Register subcommand groups from separate modules
 cli.add_command(circuits)
+cli.add_command(decompose_command)
 cli.add_command(ingest_command)
 cli.add_command(init_command)
 cli.add_command(init_prd_command)
@@ -72,6 +74,11 @@ cli.add_command(validate)
     is_flag=True,
     help="Disable phase gate validation between phases",
 )
+@click.option(
+    "--resume",
+    is_flag=True,
+    help="Resume from previous run (recover stale tasks before starting)",
+)
 def run(
     parallel: bool,
     workers: int | None,
@@ -83,6 +90,7 @@ def run(
     local: bool,
     multi_branch: bool,
     no_phase_gates: bool,
+    resume: bool,
 ) -> None:
     """Run the TDD orchestrator."""
     if all_phases and phase is not None:
@@ -106,6 +114,7 @@ def run(
         _run_async(
             parallel, resolved_workers, phase, all_phases, resolved_db_path,
             slack_webhook, max_invocations, local, single_branch, no_phase_gates,
+            resume,
         )
     )
 
@@ -121,6 +130,7 @@ async def _run_async(
     local: bool,
     single_branch: bool,
     no_phase_gates: bool = False,
+    resume: bool = False,
 ) -> None:
     """Async implementation of run command."""
     _validate_workers(workers)
@@ -133,6 +143,7 @@ async def _run_async(
             await _run_parallel(
                 db, workers, phase, all_phases, slack_webhook,
                 max_invocations, local, single_branch, no_phase_gates,
+                resume,
             )
         else:
             click.echo("Sequential execution not yet implemented")
@@ -161,8 +172,16 @@ async def _run_parallel(
     local: bool,
     single_branch: bool,
     no_phase_gates: bool = False,
+    resume: bool = False,
 ) -> None:
     """Run parallel execution with worker pool."""
+    if resume:
+        recovered = await db.cleanup_stale_claims()
+        if recovered > 0:
+            click.echo(f"Resumed: recovered {recovered} stale task(s) back to pending")
+        else:
+            click.echo("Resume: no stale tasks found")
+
     mode = "single-branch" if single_branch else "multi-branch"
     click.echo(f"Starting parallel execution with {workers} workers ({mode} mode)...")
 

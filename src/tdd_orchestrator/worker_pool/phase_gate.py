@@ -25,7 +25,7 @@ TERMINAL_STATUSES = ("complete", "passing")
 
 
 @dataclass(frozen=True)
-class TestFileResult:
+class FileTestResult:
     """Result of running pytest on a single test file."""
 
     file: str
@@ -41,7 +41,7 @@ class PhaseGateResult:
     phase: int
     passed: bool
     incomplete_tasks: list[str] = field(default_factory=list)
-    regression_results: list[TestFileResult] = field(default_factory=list)
+    regression_results: list[FileTestResult] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -152,7 +152,7 @@ class PhaseGateValidator:
 
     async def _run_batch_regression(
         self, test_files: list[str]
-    ) -> tuple[bool, list[TestFileResult]]:
+    ) -> tuple[bool, list[FileTestResult]]:
         """Run regression tests, batch first then individual on failure.
 
         Args:
@@ -170,7 +170,7 @@ class PhaseGateValidator:
 
         if batch_passed:
             results = [
-                TestFileResult(file=f, passed=True, exit_code=0, output=batch_output)
+                FileTestResult(file=f, passed=True, exit_code=0, output=batch_output)
                 for f in test_files
             ]
             return True, results
@@ -189,21 +189,21 @@ class PhaseGateValidator:
 
         return all_passed, list(results)
 
-    async def _run_pytest_single(self, test_file: str) -> TestFileResult:
+    async def _run_pytest_single(self, test_file: str) -> FileTestResult:
         """Run pytest on a single test file.
 
         Args:
             test_file: Relative path to the test file.
 
         Returns:
-            TestFileResult with pass/fail and output.
+            FileTestResult with pass/fail and output.
         """
         pytest_path = resolve_tool("pytest")
         file_path = str(self.base_dir / test_file)
         passed, output = await self._run_command(
             pytest_path, file_path, "-v", "--tb=short"
         )
-        return TestFileResult(
+        return FileTestResult(
             file=test_file,
             passed=passed,
             exit_code=0 if passed else 1,

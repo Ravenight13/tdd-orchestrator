@@ -17,7 +17,7 @@ from .config import (
     WorkerStats,
     sdk_query,
 )
-from .phase_gate import PhaseGateResult, PhaseGateValidator, TestFileResult
+from .phase_gate import PhaseGateResult, PhaseGateValidator, FileTestResult
 from .pool import WorkerPool
 from .run_validator import RunValidationResult, RunValidator
 from .worker import Worker
@@ -35,7 +35,7 @@ __all__ = [
     "RunValidator",
     "STAGE_MAX_TURNS",
     "StaticReviewCircuitBreaker",
-    "TestFileResult",
+    "FileTestResult",
     "Worker",
     "WorkerConfig",
     "WorkerPool",

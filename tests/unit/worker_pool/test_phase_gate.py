@@ -14,7 +14,7 @@ import pytest
 from tdd_orchestrator.worker_pool.phase_gate import (
     PhaseGateResult,
     PhaseGateValidator,
-    TestFileResult,
+    FileTestResult,
 )
 
 
@@ -66,7 +66,7 @@ class TestPriorPhaseCompletion:
 
         with patch.object(
             validator, "_run_batch_regression",
-            return_value=(True, [TestFileResult(
+            return_value=(True, [FileTestResult(
                 file="tests/test_a.py", passed=True, exit_code=0, output="ok",
             )]),
         ):

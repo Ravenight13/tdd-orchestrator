@@ -4,15 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from fastapi import APIRouter, Request
 from sse_starlette.sse import EventSourceResponse
 
 from tdd_orchestrator.api.sse import SSEEvent
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

@@ -48,17 +48,24 @@ class WorkerPool:
         self.workers: list[Worker] = []
         self.run_id: int = 0
 
-    async def run_parallel_phase(self, phase: int | None = None) -> PoolResult:
+    async def run_parallel_phase(
+        self, phase: int | None = None, *, resume: bool = False
+    ) -> PoolResult:
         """Run all tasks in a phase in parallel.
 
         Only Phase 0 tasks (no dependencies) are processed in parallel.
 
         Args:
             phase: Phase number to process.
+            resume: If True, clean up stale claims before starting.
 
         Returns:
             PoolResult with completion statistics.
         """
+        if resume:
+            recovered = await self.db.cleanup_stale_claims()
+            if recovered > 0:
+                logger.info("Resume: recovered %d stale task(s)", recovered)
         # Start execution run
         self.run_id = await self.db.start_execution_run(self.config.max_workers)
 
@@ -180,12 +187,15 @@ class WorkerPool:
 
         return result
 
-    async def run_all_phases(self) -> PoolResult:
+    async def run_all_phases(self, *, resume: bool = False) -> PoolResult:
         """Run all pending phases sequentially with failure gating.
 
         Iterates through phases returned by get_pending_phases(), running
         each via run_parallel_phase(). Stops on first phase failure (unless
         the stopped_reason is "no_tasks", which is non-fatal).
+
+        Args:
+            resume: If True, clean up stale claims before the first phase.
 
         Returns:
             PoolResult with aggregated statistics across all phases.
@@ -209,6 +219,7 @@ class WorkerPool:
             worker_stats=[],
         )
 
+        first_phase = True
         for phase in phases:
             if not await self._run_phase_gate(phase):
                 logger.warning("Phase gate blocked phase %d", phase)
@@ -216,7 +227,10 @@ class WorkerPool:
                 break
 
             logger.info("Starting phase %d", phase)
-            result = await self.run_parallel_phase(phase)
+            result = await self.run_parallel_phase(
+                phase, resume=resume and first_phase,
+            )
+            first_phase = False
 
             aggregate.tasks_completed += result.tasks_completed
             aggregate.tasks_failed += result.tasks_failed

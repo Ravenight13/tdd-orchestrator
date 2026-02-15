@@ -66,7 +66,7 @@ class TestRunAllPhasesOrdering:
         """Phases [0, 1, 2] all succeed -> run_parallel_phase called 0, 1, 2."""
         call_order: list[int | None] = []
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             call_order.append(phase)
             return _make_pool_result(completed=1, invocations=5)
 
@@ -82,7 +82,7 @@ class TestRunAllPhasesOrdering:
         """Phase 1 returns stopped_reason -> phase 2 never called."""
         call_order: list[int | None] = []
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             call_order.append(phase)
             if phase == 1:
                 return _make_pool_result(failed=1, stopped_reason="task_failure")
@@ -121,7 +121,7 @@ class TestRunAllPhasesAggregation:
         """Phase 0: 2 completed, phase 1: 3 completed -> total=5."""
         mock_db.get_pending_phases.return_value = [0, 1]
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             if phase == 0:
                 return _make_pool_result(completed=2, invocations=5)
             return _make_pool_result(completed=3, invocations=7)
@@ -137,7 +137,7 @@ class TestRunAllPhasesAggregation:
         """Verify tasks_failed summed across phases (stops on failure)."""
         mock_db.get_pending_phases.return_value = [0, 1]
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             if phase == 0:
                 return _make_pool_result(completed=2, invocations=5)
             return _make_pool_result(completed=1, failed=1, stopped_reason="task_failure")
@@ -154,7 +154,7 @@ class TestRunAllPhasesAggregation:
         """Verify total_invocations summed across phases."""
         mock_db.get_pending_phases.return_value = [0, 1]
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             if phase == 0:
                 return _make_pool_result(completed=1, invocations=10)
             return _make_pool_result(completed=1, invocations=15)
@@ -170,7 +170,7 @@ class TestRunAllPhasesAggregation:
         """Worker stats are from the final phase that ran."""
         mock_db.get_pending_phases.return_value = [0, 1]
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             stats = WorkerStats(worker_id=phase or 0, tasks_completed=1)
             return PoolResult(
                 tasks_completed=1, tasks_failed=0,
@@ -198,7 +198,7 @@ class TestRunAllPhasesPlaceholders:
 
         result = await pool.run_all_phases()
         assert result.tasks_completed == 1
-        pool.run_parallel_phase.assert_called_once_with(0)
+        pool.run_parallel_phase.assert_called_once_with(0, resume=False)
 
     async def test_end_of_run_validation_placeholder(
         self, pool: WorkerPool, mock_db: AsyncMock
@@ -260,7 +260,7 @@ class TestRunAllPhasesPhaseGateConfig:
         mock_db.get_pending_phases.return_value = [0, 1]
         call_order: list[int | None] = []
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             call_order.append(phase)
             return _make_pool_result(completed=1, invocations=5)
 
@@ -283,7 +283,7 @@ class TestRunAllPhasesNoTasksSkip:
         """Phase returning stopped_reason='no_tasks' does NOT stop the loop."""
         mock_db.get_pending_phases.return_value = [0, 1]
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(phase: int | None = None, **kwargs: object) -> PoolResult:
             if phase == 0:
                 return _make_pool_result(stopped_reason="no_tasks")
             return _make_pool_result(completed=2, invocations=5)

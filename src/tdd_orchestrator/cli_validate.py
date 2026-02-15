@@ -13,6 +13,7 @@ from pathlib import Path
 import click
 
 from .database import OrchestratorDB
+from .dep_graph import validate_dependencies
 from .project_config import resolve_db_for_cli
 from .worker_pool.phase_gate import PhaseGateValidator
 from .worker_pool.run_validator import RunValidator
@@ -158,5 +159,37 @@ async def _validate_all_async(db_path: Path) -> None:
 
         if any_failed:
             sys.exit(1)
+    finally:
+        await db.close()
+
+
+@validate.command("dependencies")
+@click.option("--db", type=click.Path(), default=None, help="Database path")
+def validate_deps(db: str | None) -> None:
+    """Check for dangling dependency references in tasks."""
+    try:
+        resolved_db_path, _ = resolve_db_for_cli(db)
+    except (FileNotFoundError, ValueError) as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+    asyncio.run(_validate_deps_async(resolved_db_path))
+
+
+async def _validate_deps_async(db_path: Path) -> None:
+    """Async implementation of dependency validation."""
+    db = OrchestratorDB(db_path)
+    await db.connect()
+
+    try:
+        issues = await validate_dependencies(db)
+        if not issues:
+            click.echo("All dependency references are valid.")
+            return
+
+        click.echo(f"Found {len(issues)} task(s) with dangling dependency references:")
+        for issue in issues:
+            refs = ", ".join(issue["dangling_refs"])
+            click.echo(f"  {issue['task_key']} -> [{refs}]")
+        sys.exit(1)
     finally:
         await db.close()

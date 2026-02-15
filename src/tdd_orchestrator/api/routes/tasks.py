@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from tdd_orchestrator.api.dependencies import get_broadcaster_dep, get_db_dep
+from tdd_orchestrator.api.models.responses import StatsResponse
 
 router = APIRouter()
 
@@ -130,7 +131,7 @@ async def get_tasks(
     raise HTTPException(status_code=503, detail="Database not available")
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=StatsResponse)
 async def get_stats(db: Any = Depends(get_db_dep)) -> dict[str, int]:
     """Get aggregate task counts by status.
 

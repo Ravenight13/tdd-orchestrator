@@ -314,4 +314,8 @@ class RunListResponse(BaseModel):
 class StatsResponse(BaseModel):
     """Response model for statistics endpoint."""
 
-    pass
+    pending: int = Field(ge=0)
+    running: int = Field(ge=0)
+    passed: int = Field(ge=0)
+    failed: int = Field(ge=0)
+    total: int = Field(ge=0)

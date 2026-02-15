@@ -316,16 +316,26 @@ class TestStatsResponse:
     """Tests for StatsResponse model."""
 
     def test_stats_response_instantiation(self) -> None:
-        """StatsResponse can be instantiated (basic existence test)."""
-        # This test verifies the model exists and can be imported
-        # Specific fields will depend on implementation requirements
-        response = StatsResponse()
+        """StatsResponse can be instantiated with required fields."""
+        response = StatsResponse(
+            pending=5, running=2, passed=10, failed=1, total=18,
+        )
 
         assert response is not None
+        assert response.pending == 5
+        assert response.running == 2
+        assert response.passed == 10
+        assert response.failed == 1
+        assert response.total == 18
 
     def test_stats_response_serializes_to_dict(self) -> None:
         """StatsResponse serializes to a dictionary."""
-        response = StatsResponse()
+        response = StatsResponse(
+            pending=0, running=0, passed=0, failed=0, total=0,
+        )
         data = response.model_dump()
 
         assert isinstance(data, dict)
+        assert data == {
+            "pending": 0, "running": 0, "passed": 0, "failed": 0, "total": 0,
+        }
