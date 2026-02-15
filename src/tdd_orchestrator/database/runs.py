@@ -113,11 +113,14 @@ class RunsMixin:
     # Execution Runs & Invocation Tracking
     # =========================================================================
 
-    async def start_execution_run(self, max_workers: int) -> int:
+    async def start_execution_run(
+        self, max_workers: int, pipeline_type: str = "run"
+    ) -> int:
         """Start a new execution run.
 
         Args:
             max_workers: Maximum workers configured for this run.
+            pipeline_type: Either 'run' or 'run-prd'.
 
         Returns:
             Run ID.
@@ -129,10 +132,10 @@ class RunsMixin:
         async with self._write_lock:
             cursor = await self._conn.execute(
                 """
-                INSERT INTO execution_runs (max_workers, status)
-                VALUES (?, 'running')
+                INSERT INTO execution_runs (max_workers, status, pipeline_type)
+                VALUES (?, 'running', ?)
                 """,
-                (max_workers,),
+                (max_workers, pipeline_type),
             )
             await self._conn.commit()
             return cursor.lastrowid or 0

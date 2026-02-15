@@ -9,13 +9,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from .checkpoint import CheckpointMixin
 from .connection import ConnectionMixin
 from .runs import RunsMixin
 from .tasks import TaskMixin
 from .workers import WorkerMixin
 
 
-class OrchestratorDB(ConnectionMixin, TaskMixin, WorkerMixin, RunsMixin):
+class OrchestratorDB(ConnectionMixin, TaskMixin, WorkerMixin, RunsMixin, CheckpointMixin):
     """Async SQLite database for TDD task orchestration.
 
     This class manages all database operations for the orchestrator,

@@ -31,6 +31,35 @@ from .verify_only import run_verify_only_pipeline
 
 logger = logging.getLogger(__name__)
 
+# Ordered pipeline stages for resume skip logic
+_STAGE_ORDER = ["red", "red_fix", "green", "verify", "fix", "re_verify", "refactor"]
+
+
+def _should_skip_stage(resume_from_stage: str | None, current_stage: str) -> bool:
+    """Return True if current_stage should be skipped during resume.
+
+    resume_from_stage is the LAST COMPLETED stage. We skip all stages
+    up to and including it (except we cap at verify for safety).
+
+    Args:
+        resume_from_stage: The last successfully completed stage name.
+        current_stage: The stage being considered for execution.
+
+    Returns:
+        True if current_stage should be skipped.
+    """
+    if resume_from_stage is None:
+        return False
+    try:
+        resume_idx = _STAGE_ORDER.index(resume_from_stage)
+        current_idx = _STAGE_ORDER.index(current_stage)
+        # Cap resume at verify -- don't skip past it
+        verify_idx = _STAGE_ORDER.index("verify")
+        effective_resume = min(resume_idx, verify_idx)
+        return current_idx <= effective_resume
+    except ValueError:
+        return False
+
 
 @dataclass(frozen=True)
 class PipelineContext:
@@ -48,7 +77,11 @@ class PipelineContext:
     run_stage: RunStageFunc
 
 
-async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
+async def run_tdd_pipeline(
+    ctx: PipelineContext,
+    task: dict[str, Any],
+    resume_from_stage: str | None = None,
+) -> bool:
     """Run TDD pipeline via discrete stage prompts.
 
     Pipeline: RED -> Static Review -> GREEN -> VERIFY -> REFACTOR (if needed)
@@ -57,6 +90,12 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
 
     Each successful stage is committed incrementally to preserve work,
     preventing loss of progress if later stages fail.
+
+    Args:
+        ctx: Pipeline execution context.
+        task: Task dictionary from database.
+        resume_from_stage: If set, the last completed stage from a prior
+            run. Stages up to and including this one will be skipped.
     """
     if not HAS_AGENT_SDK:
         logger.error("Agent SDK not installed - cannot process tasks")
@@ -78,17 +117,25 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
             await _run_post_verify_checks(ctx, task)
         return success
 
-    # Resume capability: Check if test file exists from prior run
-    test_file_path = Path(test_file) if test_file else None
-    skip_red = False
+    # Resume: determine which stages to skip based on prior progress
+    skip_red = _should_skip_stage(resume_from_stage, "red")
+    skip_green = _should_skip_stage(resume_from_stage, "green")
 
-    if test_file_path and test_file_path.exists():
-        prior_red = await ctx.db.get_successful_attempt(task_key, "red")
-        if prior_red:
-            logger.info("[%s] Resuming from GREEN (test file exists from prior RED)", task_key)
-            skip_red = True
-            # Use empty output since we don't have the original test output
-            result = StageResult(stage=Stage.RED, success=True, output="", error=None)
+    if skip_red:
+        logger.info(
+            "[%s] Resuming after stage '%s' -- skipping RED", task_key, resume_from_stage
+        )
+        # Synthesize a success result with empty output
+        result = StageResult(stage=Stage.RED, success=True, output="", error=None)
+    elif test_file:
+        # Legacy resume: check if test file exists from prior run
+        test_file_path = Path(test_file)
+        if test_file_path.exists():
+            prior_red = await ctx.db.get_successful_attempt(task_key, "red")
+            if prior_red:
+                logger.info("[%s] Resuming from GREEN (test file exists from prior RED)", task_key)
+                skip_red = True
+                result = StageResult(stage=Stage.RED, success=True, output="", error=None)
 
     if not skip_red:
         # Stage 1: RED - Write failing tests
@@ -100,8 +147,7 @@ async def run_tdd_pipeline(ctx: PipelineContext, task: dict[str, Any]) -> bool:
         )
 
     # Check if task is pre-implemented (RED tests passed because impl exists)
-    skip_green = False
-    if result.pre_implemented:
+    if not skip_green and result.pre_implemented:
         logger.info(
             "[%s] Pre-implemented -- skipping RED review + GREEN, proceeding to VERIFY",
             task_key,

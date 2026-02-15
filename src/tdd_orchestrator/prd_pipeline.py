@@ -47,6 +47,7 @@ class PrdPipelineConfig:
     scaffolding_ref: bool = False
     single_branch: bool = True
     enable_phase_gates: bool = True
+    resume: bool = False
 
 
 @dataclass
@@ -240,6 +241,7 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
     result = PrdPipelineResult()
     git = GitCoordinator(config.project_root)
     explicit_db: OrchestratorDB | None = None
+    resumed_run_id: int | None = None
 
     try:
         # Early check: gh available if --create-pr
@@ -250,8 +252,34 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
                 )
                 return result
 
+        # Resume: check for prior incomplete run-prd execution
+        skip_branch = False
+        skip_decompose = False
+        if config.resume and not config.dry_run:
+            resume_db = OrchestratorDB(config.db_path)
+            await resume_db.connect()
+            resumed_run_id = await resume_db.find_resumable_run("run-prd")
+            if resumed_run_id is not None:
+                checkpoint = await resume_db.load_pipeline_checkpoint(resumed_run_id)
+                if checkpoint:
+                    stage = checkpoint.get("stage_reached", "")
+                    logger.info(
+                        "Resuming run-prd run %d from stage '%s'",
+                        resumed_run_id, stage,
+                    )
+                    if stage in ("decompose", "execute", "pr", "done"):
+                        skip_branch = True
+                        skip_decompose = True
+                    elif stage == "branch":
+                        skip_branch = True
+            else:
+                logger.warning(
+                    "--resume specified but no incomplete run-prd run found; starting fresh"
+                )
+            await resume_db.close()
+
         # Stage 1: Create feature branch
-        if not config.dry_run:
+        if not config.dry_run and not skip_branch:
             result.stage_reached = "branch"
             await git.create_feature_branch(
                 branch_name=config.branch_name,
@@ -261,23 +289,28 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
             logger.info("Created feature branch: %s", config.branch_name)
 
         # Stage 2: Decompose PRD
-        result.stage_reached = "decompose"
-        await setup_project_context(config.project_root)
+        if not skip_decompose:
+            result.stage_reached = "decompose"
+            await setup_project_context(config.project_root)
 
-        exit_code = await run_decomposition(
-            spec_path=config.prd_path,
-            prefix=config.prefix,
-            clear_existing=config.clear_existing,
-            dry_run=config.dry_run,
-            use_mock_llm=config.use_mock_llm,
-            phases_filter=config.phases_filter,
-            scaffolding_ref=config.scaffolding_ref,
-        )
-        result.decomposition_exit_code = exit_code
+            exit_code = await run_decomposition(
+                spec_path=config.prd_path,
+                prefix=config.prefix,
+                clear_existing=config.clear_existing,
+                dry_run=config.dry_run,
+                use_mock_llm=config.use_mock_llm,
+                phases_filter=config.phases_filter,
+                scaffolding_ref=config.scaffolding_ref,
+            )
+            result.decomposition_exit_code = exit_code
 
-        if exit_code != 0:
-            result.error_message = "Decomposition failed"
-            return result
+            if exit_code != 0:
+                result.error_message = "Decomposition failed"
+                return result
+        else:
+            result.decomposition_exit_code = 0
+            result.stage_reached = "decompose"
+            logger.info("Skipping decomposition (resumed from checkpoint)")
 
         # Get task count from singleton before resetting
         db = await get_db()
@@ -299,6 +332,17 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
         explicit_db = OrchestratorDB(config.db_path)
         await explicit_db.connect()
 
+        # Create a run-prd tracking run and save checkpoint
+        prd_run_id = await explicit_db.start_execution_run(
+            config.workers, pipeline_type="run-prd"
+        )
+        await explicit_db.save_pipeline_checkpoint(prd_run_id, {
+            "stage_reached": "execute",
+            "branch_name": config.branch_name,
+            "task_count": result.task_count,
+            "prd_file": str(config.prd_path),
+        })
+
         worker_config = WorkerConfig(
             max_workers=config.workers,
             max_invocations_per_session=config.max_invocations,
@@ -314,7 +358,14 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
             base_dir=config.project_root,
             config=worker_config,
         )
-        result.pool_result = await pool.run_all_phases()
+        result.pool_result = await pool.run_all_phases(resume=config.resume)
+
+        # Mark PRD tracking run as completed
+        prd_status = "completed" if (
+            result.pool_result and result.pool_result.tasks_failed == 0
+        ) else "failed"
+        await explicit_db.complete_execution_run(prd_run_id, prd_status)
+
         await explicit_db.close()
         explicit_db = None
 

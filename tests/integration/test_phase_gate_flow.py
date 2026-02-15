@@ -257,7 +257,9 @@ class TestMultiPhasePoolFlow:
         # Track which phases were processed
         phases_run: list[int | None] = []
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(
+            phase: int | None = None, **kwargs: object,
+        ) -> PoolResult:
             phases_run.append(phase)
             # Mark tasks complete as the phase "runs"
             if phase == 0:
@@ -298,7 +300,9 @@ class TestMultiPhasePoolFlow:
 
         phases_run: list[int | None] = []
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(
+            phase: int | None = None, **kwargs: object,
+        ) -> PoolResult:
             phases_run.append(phase)
             # Phase 0 runs but does NOT mark TDD-01 complete
             return PoolResult(
@@ -328,7 +332,9 @@ class TestMultiPhasePoolFlow:
 
         phases_run: list[int | None] = []
 
-        async def mock_run_phase(phase: int | None = None) -> PoolResult:
+        async def mock_run_phase(
+            phase: int | None = None, **kwargs: object,
+        ) -> PoolResult:
             phases_run.append(phase)
             if phase == 0:
                 await db.update_task_status("TDD-01", "complete")

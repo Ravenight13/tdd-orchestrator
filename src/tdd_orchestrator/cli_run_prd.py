@@ -117,6 +117,11 @@ def _parse_phases(phases_str: str | None) -> set[int] | None:
     help="Disable phase gate validation between phases",
 )
 @click.option(
+    "--resume",
+    is_flag=True,
+    help="Resume from last incomplete run-prd execution",
+)
+@click.option(
     "--mock-llm",
     is_flag=True,
     hidden=True,
@@ -136,6 +141,7 @@ def run_prd_command(
     scaffolding_ref: bool,
     phases_str: str | None,
     no_phase_gates: bool,
+    resume: bool,
     mock_llm: bool,
 ) -> None:
     """Run end-to-end PRD pipeline: ingest, decompose, TDD, open PR.
@@ -189,6 +195,7 @@ def run_prd_command(
         scaffolding_ref=scaffolding_ref,
         single_branch=True,
         enable_phase_gates=not no_phase_gates,
+        resume=resume,
     )
 
     asyncio.run(_run_prd_async(pipeline_config))

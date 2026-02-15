@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from ..database import OrchestratorDB
+from ..dep_graph import are_dependencies_met
 from ..git_coordinator import GitCoordinator
 from ..merge_coordinator import MergeCoordinator
 from .config import PoolResult, WorkerConfig
@@ -66,6 +67,13 @@ class WorkerPool:
             recovered = await self.db.cleanup_stale_claims()
             if recovered > 0:
                 logger.info("Resume: recovered %d stale task(s)", recovered)
+            # Report resumable tasks
+            resumable = await self.db.get_resumable_tasks()
+            if resumable:
+                logger.info(
+                    "Resume: %d task(s) have prior stage progress",
+                    len(resumable),
+                )
         # Start execution run
         self.run_id = await self.db.start_execution_run(self.config.max_workers)
 
@@ -83,6 +91,22 @@ class WorkerPool:
                 logger.info(
                     "No tasks available for phase %s", phase if phase is not None else "all"
                 )
+                result.stopped_reason = "no_tasks"
+                return result
+
+            # Application-level dependency safety net
+            verified_tasks: list[dict[str, Any]] = []
+            for task in tasks:
+                if await are_dependencies_met(self.db, str(task["task_key"])):
+                    verified_tasks.append(task)
+                else:
+                    logger.warning(
+                        "Task %s filtered by app-level dep check", task["task_key"]
+                    )
+            tasks = verified_tasks
+
+            if not tasks:
+                logger.info("All tasks filtered by dependency check")
                 result.stopped_reason = "no_tasks"
                 return result
 

@@ -187,7 +187,12 @@ CREATE TABLE IF NOT EXISTS execution_runs (
         CHECK(status IN ('running', 'completed', 'failed', 'cancelled', 'passed')),
     validation_status TEXT
         CHECK(validation_status IN ('passed', 'failed')),
-    validation_details TEXT                 -- JSON with detailed validation results
+    validation_details TEXT,                -- JSON with detailed validation results
+
+    -- Checkpoint & resume support
+    pipeline_type TEXT DEFAULT 'run'
+        CHECK(pipeline_type IN ('run', 'run-prd')),
+    pipeline_state TEXT                     -- JSON: checkpoint data for resume
 );
 
 
@@ -273,6 +278,26 @@ CREATE TABLE IF NOT EXISTS module_exports_audit (
 
 CREATE INDEX IF NOT EXISTS idx_module_exports_audit_task_key ON module_exports_audit(task_key);
 CREATE INDEX IF NOT EXISTS idx_module_exports_audit_timestamp ON module_exports_audit(timestamp);
+
+
+-- =============================================================================
+-- RUN-TASK JUNCTION (Checkpoint & Resume)
+-- Tracks which tasks belong to which execution run
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS run_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES execution_runs(id),
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    final_status TEXT CHECK(final_status IN ('completed', 'failed', 'skipped')),
+    resume_from_stage TEXT,  -- NULL = fresh, else stage name we resumed after
+    UNIQUE(run_id, task_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_tasks_run_id ON run_tasks(run_id);
+CREATE INDEX IF NOT EXISTS idx_run_tasks_task_id ON run_tasks(task_id);
 
 
 -- =============================================================================

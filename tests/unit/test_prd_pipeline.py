@@ -290,6 +290,9 @@ class TestRunPrdPipeline:
         mock_explicit_db = MagicMock()
         mock_explicit_db.connect = AsyncMock()
         mock_explicit_db.close = AsyncMock()
+        mock_explicit_db.start_execution_run = AsyncMock(return_value=99)
+        mock_explicit_db.save_pipeline_checkpoint = AsyncMock()
+        mock_explicit_db.complete_execution_run = AsyncMock()
 
         return {
             "git": mock_git,

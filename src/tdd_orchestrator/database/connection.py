@@ -158,6 +158,9 @@ class ConnectionMixin:
         # End-of-run validation columns on execution_runs
         await self._migrate_run_validation()
 
+        # Checkpoint & resume columns on execution_runs
+        await self._migrate_pipeline_type()
+
     async def _migrate_module_exports(self) -> None:
         """Migrate database to add PLAN9 module_exports column if missing.
 
@@ -227,6 +230,30 @@ class ConnectionMixin:
                 )
                 await self._conn.commit()
                 logger.info("validation columns added successfully")
+
+    async def _migrate_pipeline_type(self) -> None:
+        """Migrate execution_runs to add checkpoint & resume columns.
+
+        Adds pipeline_type and pipeline_state for run-level checkpoint
+        tracking. Idempotent and safe to run multiple times.
+        """
+        if not self._conn:
+            return
+
+        try:
+            await self._conn.execute("SELECT pipeline_type FROM execution_runs LIMIT 1")
+            logger.debug("pipeline_type column already exists")
+        except Exception:
+            logger.info("Adding checkpoint columns to execution_runs table")
+            async with self._write_lock:
+                await self._conn.execute(
+                    "ALTER TABLE execution_runs ADD COLUMN pipeline_type TEXT DEFAULT 'run'"
+                )
+                await self._conn.execute(
+                    "ALTER TABLE execution_runs ADD COLUMN pipeline_state TEXT"
+                )
+                await self._conn.commit()
+                logger.info("checkpoint columns added successfully")
 
     # =========================================================================
     # Generic Query/Update Helpers (for testing)

@@ -230,6 +230,19 @@ class Worker:
 
     async def _run_tdd_pipeline(self, task: dict[str, Any]) -> bool:
         """Run TDD pipeline. Delegates to pipeline.run_tdd_pipeline()."""
+        # Check for resumable stage from prior attempts
+        resume_from_stage: str | None = None
+        task_id = task.get("id")
+        if task_id is not None:
+            resume_from_stage = await self.db.get_last_completed_stage(int(task_id))
+            if resume_from_stage:
+                logger.info(
+                    "Worker %d: resuming task %s from after stage '%s'",
+                    self.worker_id,
+                    task.get("task_key", "?"),
+                    resume_from_stage,
+                )
+
         ctx = PipelineContext(
             db=self.db,
             base_dir=self.base_dir,
@@ -238,7 +251,7 @@ class Worker:
             static_review_circuit_breaker=self.static_review_circuit_breaker,
             run_stage=self._run_stage,
         )
-        return await run_tdd_pipeline(ctx, task)
+        return await run_tdd_pipeline(ctx, task, resume_from_stage)
 
     async def _run_stage(
         self,

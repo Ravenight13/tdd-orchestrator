@@ -126,3 +126,76 @@ class TestResumeWorkerPool:
         mock_db.cleanup_stale_claims.return_value = 0
         result = await pool.run_parallel_phase(phase=0, resume=True)
         assert result.stopped_reason == "no_tasks"
+
+    async def test_resume_reports_resumable_tasks(
+        self, pool: WorkerPool, mock_db: AsyncMock,
+    ) -> None:
+        """resume=True queries and reports resumable tasks."""
+        mock_db.cleanup_stale_claims.return_value = 0
+        mock_db.get_resumable_tasks = AsyncMock(
+            return_value=[
+                {"id": 1, "task_key": "T-01", "status": "pending", "last_stage": "red"},
+            ]
+        )
+
+        await pool.run_parallel_phase(phase=0, resume=True)
+        mock_db.get_resumable_tasks.assert_called_once()
+
+
+class TestResumeWorkerPipeline:
+    """Tests for stage-aware resume in worker pipeline."""
+
+    async def test_worker_queries_last_stage(self) -> None:
+        """Worker._run_tdd_pipeline queries get_last_completed_stage."""
+        from tdd_orchestrator.worker_pool.worker import Worker
+
+        db = AsyncMock()
+        db.get_last_completed_stage = AsyncMock(return_value="red")
+
+        worker = Worker.__new__(Worker)
+        worker.db = db
+        worker.base_dir = Path("/tmp")
+        worker.worker_id = 1
+        worker.run_id = 1
+        worker.static_review_circuit_breaker = AsyncMock()
+
+        task = {"id": 1, "task_key": "T-01"}
+
+        with patch(
+            "tdd_orchestrator.worker_pool.worker.run_tdd_pipeline",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_pipeline:
+            result = await worker._run_tdd_pipeline(task)
+
+        assert result is True
+        db.get_last_completed_stage.assert_called_once_with(1)
+        # Verify resume_from_stage was passed to run_tdd_pipeline
+        call_args = mock_pipeline.call_args
+        assert call_args[0][2] == "red"  # third positional arg
+
+    async def test_worker_passes_none_for_fresh_task(self) -> None:
+        """Worker passes None when no prior stages completed."""
+        from tdd_orchestrator.worker_pool.worker import Worker
+
+        db = AsyncMock()
+        db.get_last_completed_stage = AsyncMock(return_value=None)
+
+        worker = Worker.__new__(Worker)
+        worker.db = db
+        worker.base_dir = Path("/tmp")
+        worker.worker_id = 1
+        worker.run_id = 1
+        worker.static_review_circuit_breaker = AsyncMock()
+
+        task = {"id": 1, "task_key": "T-01"}
+
+        with patch(
+            "tdd_orchestrator.worker_pool.worker.run_tdd_pipeline",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_pipeline:
+            await worker._run_tdd_pipeline(task)
+
+        call_args = mock_pipeline.call_args
+        assert call_args[0][2] is None  # resume_from_stage is None
