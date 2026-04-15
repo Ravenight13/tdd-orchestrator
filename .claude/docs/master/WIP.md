@@ -4,6 +4,21 @@ Partially-completed work across sessions. Updated at session end via `/cc-handof
 
 ---
 
+### Checkpoint & Resume
+**Type:** Feature
+**Started:** 2026-02-16
+**Completed:** 2026-02-17
+**Status:** Complete
+**What's Done:**
+- `--resume` flag on both `run` and `run-prd` commands
+- Stage skip logic (`_should_skip_stage()` in `pipeline.py`) — resumes from last completed stage per task
+- Pipeline checkpoints saved to `execution_runs.pipeline_state` (JSON-serialized state)
+- `run_tasks` junction table for tracking which tasks belong to which execution run
+- `CheckpointMixin` in `database/checkpoint.py` — all checkpoint DB operations
+- Dependency safety net — `_recover_dependency_chain()` ensures prerequisites are met on resume
+- PRD content hash in checkpoints — warns if PRD was edited since last run
+- 2231 tests pass, mypy strict, ruff clean
+
 ### Phase 3: Web Dashboard (React)
 **Type:** Feature
 **Started:** 2026-02-15

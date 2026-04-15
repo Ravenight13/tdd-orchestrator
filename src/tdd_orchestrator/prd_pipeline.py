@@ -11,6 +11,7 @@ with optional GitHub PR creation. Chains existing components:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import subprocess
@@ -262,6 +263,17 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
             if resumed_run_id is not None:
                 checkpoint = await resume_db.load_pipeline_checkpoint(resumed_run_id)
                 if checkpoint:
+                    saved_hash = checkpoint.get("prd_content_hash")
+                    if saved_hash:
+                        current_hash = hashlib.sha256(
+                            config.prd_path.read_bytes()
+                        ).hexdigest()
+                        if current_hash != saved_hash:
+                            logger.warning(
+                                "PRD file has been modified since last run "
+                                "(hash mismatch). Resume will use previously "
+                                "decomposed tasks."
+                            )
                     stage = checkpoint.get("stage_reached", "")
                     logger.info(
                         "Resuming run-prd run %d from stage '%s'",
@@ -336,11 +348,13 @@ async def run_prd_pipeline(config: PrdPipelineConfig) -> PrdPipelineResult:
         prd_run_id = await explicit_db.start_execution_run(
             config.workers, pipeline_type="run-prd"
         )
+        prd_content_hash = hashlib.sha256(config.prd_path.read_bytes()).hexdigest()
         await explicit_db.save_pipeline_checkpoint(prd_run_id, {
             "stage_reached": "execute",
             "branch_name": config.branch_name,
             "task_count": result.task_count,
             "prd_file": str(config.prd_path),
+            "prd_content_hash": prd_content_hash,
         })
 
         worker_config = WorkerConfig(

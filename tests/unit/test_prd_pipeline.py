@@ -6,6 +6,7 @@ the main run_prd_pipeline orchestrator with mocked stages.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -535,3 +536,273 @@ class TestRunPrdPipeline:
         assert "gh" in (result.error_message or "").lower()
         # Pipeline didn't even start decomposition
         mocks["decomposition"].assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# PRD content hash tests
+# ---------------------------------------------------------------------------
+
+
+class TestPrdContentHash:
+    """Tests for PRD content hash in pipeline checkpoints."""
+
+    def _setup_resume_mocks(
+        self,
+        *,
+        task_count: int = 5,
+    ) -> dict[str, MagicMock | AsyncMock]:
+        """Create mocks for resume pipeline tests."""
+        mock_git = MagicMock()
+        mock_git.create_feature_branch = AsyncMock()
+        mock_git.push_branch = AsyncMock()
+
+        pool_result = PoolResult(
+            tasks_completed=task_count,
+            tasks_failed=0,
+            total_invocations=20,
+            worker_stats=[],
+        )
+        mock_pool = MagicMock()
+        mock_pool.run_all_phases = AsyncMock(return_value=pool_result)
+
+        mock_db_instance = MagicMock()
+        mock_db_instance.execute_query = AsyncMock(
+            return_value=[{"cnt": task_count}]
+        )
+
+        mock_explicit_db = MagicMock()
+        mock_explicit_db.connect = AsyncMock()
+        mock_explicit_db.close = AsyncMock()
+        mock_explicit_db.start_execution_run = AsyncMock(return_value=99)
+        mock_explicit_db.save_pipeline_checkpoint = AsyncMock()
+        mock_explicit_db.complete_execution_run = AsyncMock()
+
+        return {
+            "git": mock_git,
+            "setup_context": AsyncMock(),
+            "decomposition": AsyncMock(return_value=0),
+            "get_db": AsyncMock(return_value=mock_db_instance),
+            "reset_db": AsyncMock(),
+            "cleanup_sdk": MagicMock(),
+            "pool_cls": MagicMock(return_value=mock_pool),
+            "explicit_db_cls": MagicMock(return_value=mock_explicit_db),
+        }
+
+    async def test_hash_saved_in_checkpoint(self, tmp_path: Path) -> None:
+        """Hash is included when saving pipeline checkpoint."""
+        import hashlib
+
+        config = _make_config(tmp_path)
+        mocks = self._setup_resume_mocks()
+
+        with patch.multiple("tdd_orchestrator.prd_pipeline",
+                            GitCoordinator=MagicMock(return_value=mocks["git"]),
+                            setup_project_context=mocks["setup_context"],
+                            run_decomposition=mocks["decomposition"],
+                            get_db=mocks["get_db"],
+                            reset_db=mocks["reset_db"],
+                            _cleanup_sdk_processes=mocks["cleanup_sdk"],
+                            WorkerPool=mocks["pool_cls"],
+                            OrchestratorDB=mocks["explicit_db_cls"]):
+            await run_prd_pipeline(config)
+
+        # Verify checkpoint was saved with hash
+        save_call = mocks["explicit_db_cls"].return_value.save_pipeline_checkpoint
+        save_call.assert_awaited_once()
+        checkpoint_data = save_call.call_args[0][1]
+        expected_hash = hashlib.sha256(config.prd_path.read_bytes()).hexdigest()
+        assert checkpoint_data["prd_content_hash"] == expected_hash
+
+    async def test_hash_mismatch_produces_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Modified PRD produces a warning log on resume."""
+        import hashlib
+
+        prd_file = tmp_path / "spec.md"
+        prd_file.write_text("original content", encoding="utf-8")
+        original_hash = hashlib.sha256(b"original content").hexdigest()
+
+        # Now modify the PRD
+        prd_file.write_text("modified content", encoding="utf-8")
+
+        db_path = tmp_path / ".tdd" / "orchestrator.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        config = PrdPipelineConfig(
+            prd_path=prd_file,
+            project_root=tmp_path,
+            db_path=db_path,
+            prefix="TEST",
+            branch_name="feat/spec",
+            base_branch="main",
+            workers=2,
+            max_invocations=50,
+            create_pr=False,
+            dry_run=False,
+            use_mock_llm=True,
+            resume=True,
+        )
+
+        mocks = self._setup_resume_mocks()
+
+        # Mock the resume DB to return a resumable run with old hash
+        mock_resume_db = MagicMock()
+        mock_resume_db.connect = AsyncMock()
+        mock_resume_db.close = AsyncMock()
+        mock_resume_db.find_resumable_run = AsyncMock(return_value=42)
+        mock_resume_db.load_pipeline_checkpoint = AsyncMock(return_value={
+            "stage_reached": "execute",
+            "branch_name": "feat/spec",
+            "task_count": 5,
+            "prd_file": str(prd_file),
+            "prd_content_hash": original_hash,
+        })
+
+        # OrchestratorDB is called twice: once for resume check, once for execution
+        call_count = 0
+        def db_factory(path: object) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_resume_db
+            return mocks["explicit_db_cls"].return_value
+
+        with patch.multiple("tdd_orchestrator.prd_pipeline",
+                            GitCoordinator=MagicMock(return_value=mocks["git"]),
+                            setup_project_context=mocks["setup_context"],
+                            run_decomposition=mocks["decomposition"],
+                            get_db=mocks["get_db"],
+                            reset_db=mocks["reset_db"],
+                            _cleanup_sdk_processes=mocks["cleanup_sdk"],
+                            WorkerPool=mocks["pool_cls"],
+                            OrchestratorDB=db_factory):
+            with caplog.at_level(logging.WARNING, logger="tdd_orchestrator.prd_pipeline"):
+                await run_prd_pipeline(config)
+
+        assert any("hash mismatch" in r.message for r in caplog.records)
+
+    async def test_hash_match_no_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Unchanged PRD produces no hash warning on resume."""
+        import hashlib
+
+        prd_file = tmp_path / "spec.md"
+        prd_file.write_text("same content", encoding="utf-8")
+        same_hash = hashlib.sha256(b"same content").hexdigest()
+
+        db_path = tmp_path / ".tdd" / "orchestrator.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        config = PrdPipelineConfig(
+            prd_path=prd_file,
+            project_root=tmp_path,
+            db_path=db_path,
+            prefix="TEST",
+            branch_name="feat/spec",
+            base_branch="main",
+            workers=2,
+            max_invocations=50,
+            create_pr=False,
+            dry_run=False,
+            use_mock_llm=True,
+            resume=True,
+        )
+
+        mocks = self._setup_resume_mocks()
+
+        mock_resume_db = MagicMock()
+        mock_resume_db.connect = AsyncMock()
+        mock_resume_db.close = AsyncMock()
+        mock_resume_db.find_resumable_run = AsyncMock(return_value=42)
+        mock_resume_db.load_pipeline_checkpoint = AsyncMock(return_value={
+            "stage_reached": "execute",
+            "branch_name": "feat/spec",
+            "task_count": 5,
+            "prd_file": str(prd_file),
+            "prd_content_hash": same_hash,
+        })
+
+        call_count = 0
+        def db_factory(path: object) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_resume_db
+            return mocks["explicit_db_cls"].return_value
+
+        with patch.multiple("tdd_orchestrator.prd_pipeline",
+                            GitCoordinator=MagicMock(return_value=mocks["git"]),
+                            setup_project_context=mocks["setup_context"],
+                            run_decomposition=mocks["decomposition"],
+                            get_db=mocks["get_db"],
+                            reset_db=mocks["reset_db"],
+                            _cleanup_sdk_processes=mocks["cleanup_sdk"],
+                            WorkerPool=mocks["pool_cls"],
+                            OrchestratorDB=db_factory):
+            with caplog.at_level(logging.WARNING, logger="tdd_orchestrator.prd_pipeline"):
+                await run_prd_pipeline(config)
+
+        assert not any("hash mismatch" in r.message for r in caplog.records)
+
+    async def test_missing_hash_no_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Checkpoint without hash (backwards compat) produces no warning."""
+        prd_file = tmp_path / "spec.md"
+        prd_file.write_text("content", encoding="utf-8")
+
+        db_path = tmp_path / ".tdd" / "orchestrator.db"
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        config = PrdPipelineConfig(
+            prd_path=prd_file,
+            project_root=tmp_path,
+            db_path=db_path,
+            prefix="TEST",
+            branch_name="feat/spec",
+            base_branch="main",
+            workers=2,
+            max_invocations=50,
+            create_pr=False,
+            dry_run=False,
+            use_mock_llm=True,
+            resume=True,
+        )
+
+        mocks = self._setup_resume_mocks()
+
+        # Checkpoint has no prd_content_hash key (old format)
+        mock_resume_db = MagicMock()
+        mock_resume_db.connect = AsyncMock()
+        mock_resume_db.close = AsyncMock()
+        mock_resume_db.find_resumable_run = AsyncMock(return_value=42)
+        mock_resume_db.load_pipeline_checkpoint = AsyncMock(return_value={
+            "stage_reached": "execute",
+            "branch_name": "feat/spec",
+            "task_count": 5,
+            "prd_file": str(prd_file),
+        })
+
+        call_count = 0
+        def db_factory(path: object) -> MagicMock:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return mock_resume_db
+            return mocks["explicit_db_cls"].return_value
+
+        with patch.multiple("tdd_orchestrator.prd_pipeline",
+                            GitCoordinator=MagicMock(return_value=mocks["git"]),
+                            setup_project_context=mocks["setup_context"],
+                            run_decomposition=mocks["decomposition"],
+                            get_db=mocks["get_db"],
+                            reset_db=mocks["reset_db"],
+                            _cleanup_sdk_processes=mocks["cleanup_sdk"],
+                            WorkerPool=mocks["pool_cls"],
+                            OrchestratorDB=db_factory):
+            with caplog.at_level(logging.WARNING, logger="tdd_orchestrator.prd_pipeline"):
+                await run_prd_pipeline(config)
+
+        assert not any("hash mismatch" in r.message for r in caplog.records)
