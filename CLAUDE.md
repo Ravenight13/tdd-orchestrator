@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-TDD Orchestrator — parallel TDD task execution engine with circuit breakers and LLM decomposition. Solo project by Cliff Clarke. Standalone pip-installable library and CLI.
+TDD Orchestrator — parallel TDD task engine. Circuit breakers + LLM decomposition. Solo project Cliff Clarke. Standalone pip lib + CLI.
 
 ## Essential Commands
 
@@ -20,57 +20,57 @@ tdd-orchestrator run-prd <file>     # End-to-end PRD pipeline
 
 ## Things That Will Bite You
 
-- **SDK imports**: Claude Agent SDK is optional. Always guard with `try/except ImportError` and `SDK_AVAILABLE` flag.
-- **asyncio_mode**: Set to `"auto"` in pyproject.toml — no `@pytest.mark.asyncio` decorator needed.
-- **src-layout imports**: File paths start with `src/` but imports must NOT use `from src.tdd_orchestrator`. Never create `src/__init__.py`.
-- **aiosqlite rows**: Row access returns `Any` — wrap with `str()`, `int()`, etc. for typed returns.
-- **DB singleton in tests**: `get_db()` leaks connections between tests. Use `reset_db()` in fixtures.
+- **SDK imports**: Claude Agent SDK optional. Guard with `try/except ImportError` + `SDK_AVAILABLE` flag.
+- **asyncio_mode**: Set `"auto"` in pyproject.toml — no `@pytest.mark.asyncio` decorator needed.
+- **src-layout imports**: Paths start `src/` but imports must NOT use `from src.tdd_orchestrator`. Never create `src/__init__.py`.
+- **aiosqlite rows**: Row access returns `Any` — wrap `str()`, `int()` for typed returns.
+- **DB singleton in tests**: `get_db()` leaks connections. Use `reset_db()` in fixtures.
 - **`_run_with_cleanup()`**: Calls `os._exit(0)` — never test through it, test `main()` directly.
 
 ## Quick Reference
 
 - **TDD Pipeline**: RED → RED_FIX → GREEN → VERIFY → (FIX → RE_VERIFY)
 - **Circuit Breakers**: Stage (per task:stage), Worker (per worker), System (global). States: CLOSED → OPEN → HALF_OPEN → CLOSED
-- **Worker Pool**: Claim-based distribution with optimistic locking. Single-branch or multi-branch modes.
+- **Worker Pool**: Claim-based distribution, optimistic locking. Single-branch or multi-branch modes.
 - **Decomposition**: 4-pass LLM pipeline (extract cycles → atomize → acceptance criteria → implementation hints)
 - **Model Selection**: RED/decomposition always Opus. Low=Haiku, Medium=Sonnet, High=Opus. GREEN retries escalate.
 
 ## Code Organization (Mission Critical)
 
-- Many small files over few large files
+- Many small files over few large
 - 200-400 lines typical, **800 absolute max** per file
-- High cohesion, low coupling — each module owns one responsibility
-- When a file grows past 400 lines, proactively split it before it hits the limit
-- When adding new functionality, create a new module rather than appending to an existing one
+- High cohesion, low coupling — each module one responsibility
+- File past 400 lines → split before hits limit
+- New functionality → new module, not append to existing
 
-**Splitting signals**: multiple classes, unrelated functions grouped together, file requires scrolling to understand, imports span many unrelated domains.
+**Splitting signals**: multiple classes, unrelated functions grouped, file needs scrolling to grok, imports span many unrelated domains.
 
 ## Non-Negotiable Rules
 
-Security rules enforced in `.claude/rules/security.md` (auto-loaded).
+Security rules in `.claude/rules/security.md` (auto-loaded).
 
-- **NEVER** let a file exceed 800 lines — split by responsibility before reaching the limit
-- **NEVER** assume Claude SDK is installed (it's optional)
-- **ALWAYS** maintain mypy strict compliance
-- **ALWAYS** run `ruff check` and `mypy --strict` before committing
+- **NEVER** let file exceed 800 lines — split by responsibility before limit
+- **NEVER** assume Claude SDK installed (optional)
+- **ALWAYS** keep mypy strict compliance
+- **ALWAYS** run `ruff check` + `mypy --strict` before commit
 - **ALWAYS** write tests for new functionality
 
 ## Commit Conventions
 
-Conventional commits: `<type>(<scope>): <description>` — types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`. Title under 72 chars, imperative mood. Body explains **why**. Always include `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`. Session handoffs: `chore(session): <session-slug>`.
+Conventional commits: `<type>(<scope>): <description>` — types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`. Title under 72 chars, imperative. Body = **why**. Always include `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`. Session handoffs: `chore(session): <session-slug>`.
 
 ## Compaction
 
-When compacting, always preserve: the full list of modified files, active todo items, any test commands that were run, and the current session goal.
+When compacting, preserve: full list modified files, active todos, test commands run, current session goal.
 
 ## Master Documents
 
-Living project documents in `.claude/docs/master/`:
+Living docs in `.claude/docs/master/`:
 - `DECISIONS_ACTIVE.md` — Current decisions (read at session start)
 - `WIP.md` — Work in progress across sessions
 - `DEAD_ENDS.md` — Failed approaches (check before proposing solutions)
 - `ASSUMPTIONS.md` — Foundational beliefs (flag if challenged)
-- `KNOWLEDGE_DEBT.md` — Documentation gaps from corrections
+- `KNOWLEDGE_DEBT.md` — Doc gaps from corrections
 - `DECISIONS_SUPERSEDED.md` — Historical decisions archive
 
 ## Key References
