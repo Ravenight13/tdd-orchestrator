@@ -65,7 +65,7 @@ When compacting, preserve: full list modified files, active todos, test commands
 
 ## Master Documents
 
-Living docs in `.claude/docs/master/`:
+Living docs in `.ai/architecture/`:
 - `DECISIONS_ACTIVE.md` — Current decisions (read at session start)
 - `WIP.md` — Work in progress across sessions
 - `DEAD_ENDS.md` — Failed approaches (check before proposing solutions)
