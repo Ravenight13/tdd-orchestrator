@@ -59,7 +59,7 @@ The 4 oversized module splits are committed and all post-split bugs are fixed (4
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_1230_committed-module-splits-and-fixed-integration-tests.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Error details**: Run `pytest tests/integration/test_code_verifier.py tests/integration/test_green_retry_integration.py tests/integration/test_worker_budget.py -v --tb=short` to see all 9 failures with tracebacks
 
 ---

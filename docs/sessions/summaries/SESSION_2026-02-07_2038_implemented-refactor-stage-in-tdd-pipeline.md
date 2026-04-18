@@ -48,7 +48,7 @@ Implemented a full REFACTOR stage in the TDD pipeline following the REVISED_PLAN
 - `tests/unit/test_refactor_checker.py` (153 lines, 10 tests)
 - `tests/unit/test_prompt_builder.py` (51 lines, 5 tests)
 - `tests/integration/test_refactor_pipeline.py` (249 lines, 6 tests)
-- `docs/plans/add-tdd-refactor/REVISED_PLAN.md` - architect-reviewed implementation plan
+- `.ai/plans/add-tdd-refactor/REVISED_PLAN.md` - architect-reviewed implementation plan
 
 **Modified (6)**
 - `src/tdd_orchestrator/prompt_builder.py` (725 -> 292 lines)
@@ -76,7 +76,7 @@ None
 
 ## Next Priorities
 
-1. **Run API layer spec through decomposition**: Execute `tdd-orchestrator decompose docs/specs/api_layer_spec.txt` to generate TDD tasks from the API layer specification
+1. **Run API layer spec through decomposition**: Execute `tdd-orchestrator decompose .ai/research/api_layer_spec.txt` to generate TDD tasks from the API layer specification
 2. **Follow-up hook (deferred)**: Create `.claude/hooks/plan_model_gate.sh` to warn when Plan/architect agents use non-Opus models
 
 ---

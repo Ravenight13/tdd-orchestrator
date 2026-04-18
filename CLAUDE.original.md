@@ -75,7 +75,7 @@ Living project documents in `.claude/docs/master/`:
 
 ## Key References
 
-- Architecture: `docs/ARCHITECTURE.md`
+- Architecture: `.ai/architecture/ARCHITECTURE.md`
 - Database schema: `schema/schema.sql`
 - Domain models: `src/tdd_orchestrator/models.py`
 - Build config: `pyproject.toml`

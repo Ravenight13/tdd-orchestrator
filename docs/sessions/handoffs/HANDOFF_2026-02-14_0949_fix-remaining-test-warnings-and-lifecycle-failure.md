@@ -58,9 +58,9 @@ Test suite is now fully functional: 1812 passed, 1 pre-existing failure, 3 skipp
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-14_0949_fixed-test-suite-hangs-and-removed-dead-tests.md`
-- **Pipeline integrity roadmap**: `docs/plans/pipeline-integrity/ROADMAP.md`
+- **Pipeline integrity roadmap**: `.ai/plans/pipeline-integrity/ROADMAP.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

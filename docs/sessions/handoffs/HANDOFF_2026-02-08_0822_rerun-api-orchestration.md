@@ -55,7 +55,7 @@ Three systemic worker pipeline issues were fixed: non-Python file guards (ruff/m
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-08_0822_fix-worker-pipeline-guards.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Key commit**: `2c3ce06 fix(worker): guard pipeline against non-Python files, missing tests, and path mismatches`
 
 ---

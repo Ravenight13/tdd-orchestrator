@@ -67,7 +67,7 @@ All 5 P1 dashboard polish features were implemented: dark mode, dnd-kit Kanban d
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-15_0830_implemented-dashboard-p1-polish-features.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **PRD subagent ID**: a310b4d (was still running at handoff)
 - **DB schema**: `schema/schema.sql` (attempts, tasks, invocations, circuit_breaker_events tables used by new endpoints)
 - **API test patterns**: See `tests/unit/api/test_route_registration.py` and `tests/unit/api/conftest.py` for existing patterns

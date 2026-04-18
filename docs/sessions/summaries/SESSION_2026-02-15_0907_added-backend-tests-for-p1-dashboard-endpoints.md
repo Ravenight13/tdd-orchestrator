@@ -44,7 +44,7 @@ _No major decisions this session_
 **Modified files:**
 - `tests/unit/api/test_route_registration.py`
 - `.claude/docs/master/WIP.md`
-- `docs/PRODUCTION_VISION.md`
+- `.ai/architecture/PRODUCTION_VISION.md`
 
 ### Git State
 

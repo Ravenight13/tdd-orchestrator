@@ -97,7 +97,7 @@ If module interacts with database:
 Check documentation exists and is current:
 - [ ] Module docstring present
 - [ ] Public functions have docstrings
-- [ ] `docs/ARCHITECTURE.md` reflects current architecture
+- [ ] `.ai/architecture/ARCHITECTURE.md` reflects current architecture
 - [ ] `README.md` updated if CLI commands changed
 - [ ] CLAUDE.md updated if major structural changes
 

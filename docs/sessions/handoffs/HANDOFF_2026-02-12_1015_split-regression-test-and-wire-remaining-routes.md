@@ -61,7 +61,7 @@ API-TDD-12-05 GREEN is complete. Workers, runs, and metrics routes now query the
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-12_1015_wired-workers-runs-metrics-routes-to-db.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **DB dependency pattern**: Route handlers use `db: Any = Depends(get_db_dep)` and check `if db is not None` before querying. Placeholder functions remain as fallbacks for unit tests.
 - **Status mapping**: DB statuses (`in_progress`, `complete`, `blocked`) map to API statuses (`running`, `passed`, `failed`) in both tasks and metrics endpoints.
 

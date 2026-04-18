@@ -75,8 +75,8 @@ Phases 1 (API Layer) and 2 (CLI Pipeline) are fully complete — all P0 and P1 i
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-14_2008_completed-phase-1-2-cleanup-p1-features-and-test-coverage.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
-- **Production Vision**: `docs/PRODUCTION_VISION.md` — Phase 3 scope defined in Section III
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
+- **Production Vision**: `.ai/architecture/PRODUCTION_VISION.md` — Phase 3 scope defined in Section III
 - **API routes**: `src/tdd_orchestrator/api/routes/` — all endpoints the dashboard will consume
 - **SSE broadcaster**: `src/tdd_orchestrator/api/sse.py` — real-time event infrastructure
 

@@ -60,7 +60,7 @@ The `src.` prefix bug that caused API-TDD-04-03 to fail all GREEN attempts has b
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-09_0807_fixed-src-prefix-in-sdk-worker-imports.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

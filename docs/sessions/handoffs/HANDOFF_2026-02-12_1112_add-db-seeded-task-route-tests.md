@@ -66,7 +66,7 @@ All 4 task route placeholders are now wired to the database. mypy strict passes 
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-12_1112_fix-mypy-split-tests-wire-task-routes.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Task routes**: `src/tdd_orchestrator/api/routes/tasks.py` (435 lines, all endpoints async + DB-wired)
 - **Test helpers**: `tests/integration/api/helpers.py` (shared models + `_create_seeded_test_app()`)
 - **DB task methods**: `src/tdd_orchestrator/database/tasks.py` (`get_task_by_key`, `get_progress`, `get_stage_attempts`, `update_task_status`)

@@ -16,7 +16,7 @@ tags: [session-complete, tdd-orchestrator]
 
 Before starting, review:
 1. This handoff document
-2. **Phase 1 plan**: `docs/plans/pipeline-integrity/PHASE1.md`
+2. **Phase 1 plan**: `.ai/plans/pipeline-integrity/PHASE1.md`
 3. Recent git log: `git log --oneline -10`
 4. Run health check: `/cc-ready`
 
@@ -40,7 +40,7 @@ Created 6 pipeline integrity plan files covering a 16-session roadmap (5 phases,
 
 - **Branch**: main
 - **Known issues**: Uncommitted changes from prior sessions (API routes, prompts, tests) must be committed first
-- **Uncommitted changes**: API models/routes, decomposition/prompts.py, test_boundary_detection.py, plus 6 new plan files in `docs/plans/pipeline-integrity/`
+- **Uncommitted changes**: API models/routes, decomposition/prompts.py, test_boundary_detection.py, plus 6 new plan files in `.ai/plans/pipeline-integrity/`
 
 ---
 
@@ -54,7 +54,7 @@ Commit all pre-existing uncommitted work before starting Phase 1. Two logical co
 
 ### Priority 1: Phase 1, Session 1 -- Boundary Validation (1A) + Key Uniqueness (1C)
 
-**Plan file**: `docs/plans/pipeline-integrity/PHASE1.md` (Session 1 section, lines 269-289)
+**Plan file**: `.ai/plans/pipeline-integrity/PHASE1.md` (Session 1 section, lines 269-289)
 
 **Tasks**:
 - Add `validate_integration_boundaries()` to `AtomicityValidator` in `src/tdd_orchestrator/decomposition/validators.py` (378 -> ~410 lines)
@@ -78,7 +78,7 @@ Commit all pre-existing uncommitted work before starting Phase 1. Two logical co
 
 ### Priority 2: Phase 1, Session 2 -- Cycle Detection (1B)
 
-**Plan file**: `docs/plans/pipeline-integrity/PHASE1.md` (Session 2 section, lines 291-309)
+**Plan file**: `.ai/plans/pipeline-integrity/PHASE1.md` (Session 2 section, lines 291-309)
 
 **Tasks**:
 - Create `src/tdd_orchestrator/decomposition/dependency_validator.py` (~80 lines) with Kahn's algorithm
@@ -90,15 +90,15 @@ Commit all pre-existing uncommitted work before starting Phase 1. Two logical co
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-13_0631_created-pipeline-integrity-plan-files.md`
-- **Phase 1 plan**: `docs/plans/pipeline-integrity/PHASE1.md`
-- **Full roadmap**: `docs/plans/pipeline-integrity/ROADMAP.md`
+- **Phase 1 plan**: `.ai/plans/pipeline-integrity/PHASE1.md`
+- **Full roadmap**: `.ai/plans/pipeline-integrity/ROADMAP.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ### Plan File Inventory
 
 ```
-docs/plans/pipeline-integrity/
+.ai/plans/pipeline-integrity/
   ROADMAP.md   (558 lines) - Full roadmap, 13 gaps, 5 phases
   PHASE1.md    (370 lines) - Decomposition Hardening -- 2 sessions, independent
   PHASE2.md    (518 lines) - Pipeline Extract + Metadata -- 4 sessions, independent

@@ -75,7 +75,7 @@ None
 
 ## Next Priorities
 
-1. **Wire circuits routes to DB** — `/circuits`, `/circuits/{id}/reset`, `/circuits/health` are the last unimplemented route group in the Phase 1 plan. Reference: `docs/plans/PLAN_PHASE1_API_LAYER.md` Step 6.
+1. **Wire circuits routes to DB** — `/circuits`, `/circuits/{id}/reset`, `/circuits/health` are the last unimplemented route group in the Phase 1 plan. Reference: `.ai/plans/PLAN_PHASE1_API_LAYER.md` Step 6.
 2. **Clean up inline SQL in task routes** — `tasks.py` has raw SQL queries; should delegate to `db.get_tasks_filtered()` as planned in the Phase 1 spec (Section 3, database/tasks.py modifications).
 3. **Wire SSE observer for real-time events** — Phase 1 Step 9: connect DB-level observer to SSE broadcaster so task status changes publish events to `/events` endpoint.
 

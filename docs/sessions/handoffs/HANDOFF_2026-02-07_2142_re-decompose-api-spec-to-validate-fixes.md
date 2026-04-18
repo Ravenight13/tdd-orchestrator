@@ -48,7 +48,7 @@ Fixed 5 root causes in the decomposition pipeline (hardcoded paths, unpersisted 
 1. **Re-decompose the API spec with scaffolding reference enabled**:
    ```bash
    .venv/bin/python -m tdd_orchestrator.decompose_spec \
-       --spec docs/specs/api_layer_spec.txt \
+       --spec .ai/research/api_layer_spec.txt \
        --prefix API --clear --scaffolding-ref -v
    ```
 
@@ -80,9 +80,9 @@ Fixed 5 root causes in the decomposition pipeline (hardcoded paths, unpersisted 
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_2142_decomposition-pipeline-refinements-and-mypy-fixes.md`
-- **Implementation plan**: `docs/plans/decomposition-refinements/PLAN.md`
+- **Implementation plan**: `.ai/plans/decomposition-refinements/PLAN.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

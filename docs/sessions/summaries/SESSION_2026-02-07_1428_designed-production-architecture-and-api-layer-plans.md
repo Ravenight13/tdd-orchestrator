@@ -39,18 +39,18 @@ Conducted a comprehensive exploration session to design TDD Orchestrator's evolu
 - Ran full health check: 324 tests passing, mypy strict clean, ruff clean, Python 3.13.11
 - Applied `/evaluate` mental models (First Principles -> SWOT -> Second-Order Effects) to analyze architecture paths
 - Generated top 10 suggestions for each of 3 concerns: PRD intake, service deployment, web dashboard
-- Wrote `docs/PRODUCTION_VISION.md` documenting all 30 ideas with priorities and target architecture
-- Wrote `docs/plans/PLAN_PRODUCTION_ARCHITECTURE.md` — 5-phase plan (API Layer -> PRD Pipeline -> Dashboard -> Federation -> Ecosystem)
-- Wrote `docs/plans/PLAN_PHASE1_API_LAYER.md` — 2,092-line detailed implementation plan with 10 build steps, 18 new files, 16 Pydantic models, 15 endpoints, 8 SSE event types, and 10 open debate questions
+- Wrote `.ai/architecture/PRODUCTION_VISION.md` documenting all 30 ideas with priorities and target architecture
+- Wrote `.ai/plans/PLAN_PRODUCTION_ARCHITECTURE.md` — 5-phase plan (API Layer -> PRD Pipeline -> Dashboard -> Federation -> Ecosystem)
+- Wrote `.ai/plans/PLAN_PHASE1_API_LAYER.md` — 2,092-line detailed implementation plan with 10 build steps, 18 new files, 16 Pydantic models, 15 endpoints, 8 SSE event types, and 10 open debate questions
 - Explored entire codebase via 3 parallel agents: core engine (CLI, DB, workers, circuits), decomposition pipeline (4-pass, git, hooks), test structure (539 tests, MCP tools, file inventory)
 
 ### Files Created
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `docs/PRODUCTION_VISION.md` | ~200 | Vision document with all ideas, evaluation summary, target architecture |
-| `docs/plans/PLAN_PRODUCTION_ARCHITECTURE.md` | ~240 | 5-phase overall architecture plan |
-| `docs/plans/PLAN_PHASE1_API_LAYER.md` | 2,092 | Detailed Phase 1 implementation plan (build sequence, file specs, tests, open questions) |
+| `.ai/architecture/PRODUCTION_VISION.md` | ~200 | Vision document with all ideas, evaluation summary, target architecture |
+| `.ai/plans/PLAN_PRODUCTION_ARCHITECTURE.md` | ~240 | 5-phase overall architecture plan |
+| `.ai/plans/PLAN_PHASE1_API_LAYER.md` | 2,092 | Detailed Phase 1 implementation plan (build sequence, file specs, tests, open questions) |
 
 ### Git State
 

@@ -55,7 +55,7 @@ Git history is clean (wip commits squashed), and all integration tests are now i
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_1320_cleaned-wip-commits-and-isolated-integration-tests.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Integration test conftest**: `tests/integration/conftest.py` has `git_repo` fixture for tests needing real git
 
 ---

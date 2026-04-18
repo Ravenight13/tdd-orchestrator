@@ -65,7 +65,7 @@ The codebase was evaluated post-extraction. Ruff is clean. Mypy has 20 strict er
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_0922_evaluated-codebase-health-and-cataloged-test-failures.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

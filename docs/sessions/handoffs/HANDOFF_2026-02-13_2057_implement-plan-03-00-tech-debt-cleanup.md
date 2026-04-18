@@ -46,7 +46,7 @@ Phase 2 is complete (G1 verify_command, G2 done_criteria). Two tech debt items w
 ## Next Priorities
 
 1. **Commit the Phase 3 plan files** (uncommitted from this session)
-2. **Implement 03-00-PLAN.md** (`docs/plans/pipeline-integrity/03-00-PLAN.md`):
+2. **Implement 03-00-PLAN.md** (`.ai/plans/pipeline-integrity/03-00-PLAN.md`):
    - Task 1: Extract `_resolve_tool()` to `src/tdd_orchestrator/subprocess_utils.py`, update imports in `code_verifier.py` and `verify_command_runner.py`
    - Task 2: Add post-verify checks to `verify_only.py` at both success paths (VERIFY pass, RE_VERIFY pass)
 3. **Then 03-01-PLAN.md**: Multi-phase loop in pool.py + `--all-phases` CLI flag
@@ -55,11 +55,11 @@ Phase 2 is complete (G1 verify_command, G2 done_criteria). Two tech debt items w
 
 ## Key Context
 
-- **Plan file**: `docs/plans/pipeline-integrity/03-00-PLAN.md` (detailed tasks, verification commands, success criteria)
-- **Phase 3 overview**: `docs/plans/pipeline-integrity/PHASE3.md` (revised with actual metrics)
+- **Plan file**: `.ai/plans/pipeline-integrity/03-00-PLAN.md` (detailed tasks, verification commands, success criteria)
+- **Phase 3 overview**: `.ai/plans/pipeline-integrity/PHASE3.md` (revised with actual metrics)
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-13_2057_phase2-verify-command-done-criteria-and-phase3-planning.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

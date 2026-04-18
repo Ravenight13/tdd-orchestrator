@@ -67,7 +67,7 @@ Phase 3 P0 web dashboard is complete — React 19 + Vite 6 + Tailwind v4 app wit
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-15_0759_implemented-phase-3-web-dashboard.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Frontend source**: `frontend/src/` (64 files, all under 150 lines)
 - **Static serving**: `src/tdd_orchestrator/api/static_files.py`
 - **Dashboard plan reference**: The original Phase 3 plan transcript is at `/Users/cliffclarke/.claude/projects/-Users-cliffclarke-Projects-tdd-orchestrator/a4dba6f0-b147-4880-9f59-0995b6794776.jsonl`

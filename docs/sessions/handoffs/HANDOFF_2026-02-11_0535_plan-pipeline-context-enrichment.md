@@ -74,7 +74,7 @@ RED stage sibling awareness is implemented and validated across 11 API tasks (ph
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-11_0535_red-sibling-awareness-and-api-phases-5-7.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Pipeline context audit**: Detailed in the session conversation — the explore agent produced a comprehensive "Context Richness by Stage" table showing exactly what each stage sees and what it's missing
 - **Phase 5 failure analysis**: 05-02's RED wrote `assert value_response.status_code == 422` but 05-01 established 400. Root cause: sibling hints only extract `await` patterns, not behavioral assertions.
 

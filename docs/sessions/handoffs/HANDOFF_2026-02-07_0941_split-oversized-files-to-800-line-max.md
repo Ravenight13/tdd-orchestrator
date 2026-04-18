@@ -67,7 +67,7 @@ CLAUDE.md now enforces an 800-line max per file as a Non-Negotiable Rule. Four e
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_0941_enhanced-claude-md-with-code-organization-rules.md`
 - **TODO details**: `TO-DOS.md` — has file-specific splitting plans with line counts and solution approaches
 - **CLAUDE.md**: Now includes Code Organization rules and 800-line Non-Negotiable Rule
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

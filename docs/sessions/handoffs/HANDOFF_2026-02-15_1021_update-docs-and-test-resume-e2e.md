@@ -45,7 +45,7 @@ Checkpoint & resume is fully implemented and tested (2220 tests passing, mypy/ru
 
 ## Next Priorities
 
-1. **Update WIP.md and master docs** — Add checkpoint & resume feature to `.claude/docs/master/WIP.md`, update `docs/ARCHITECTURE.md` with new schema tables and resume flow description
+1. **Update WIP.md and master docs** — Add checkpoint & resume feature to `.claude/docs/master/WIP.md`, update `.ai/architecture/ARCHITECTURE.md` with new schema tables and resume flow description
 2. **End-to-end resume testing** — Run `tdd-orchestrator run --resume` against a real project, interrupt mid-pipeline, verify tasks resume from correct stage. Test `run-prd --resume` similarly.
 3. **PRD hash check (optional enhancement)** — Add PRD file content hash to `pipeline_state` checkpoint so `--resume` can warn if PRD was edited since last run
 
@@ -55,7 +55,7 @@ Checkpoint & resume is fully implemented and tested (2220 tests passing, mypy/ru
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-15_1021_implemented-checkpoint-resume-and-dependency-safety-net.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **New module**: `src/tdd_orchestrator/database/checkpoint.py` — CheckpointMixin with all resume DB operations
 - **Resume logic**: `src/tdd_orchestrator/worker_pool/pipeline.py` — `_should_skip_stage()` + `run_tdd_pipeline(resume_from_stage=)`
 

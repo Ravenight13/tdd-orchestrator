@@ -31,7 +31,7 @@ cd /Users/cliffclarke/Projects/tdd_orchestrator
 
 ## Executive Summary
 
-The REFACTOR stage has been fully implemented in the TDD pipeline (525 tests passing, mypy/ruff clean). The next step is to run the API layer specification through the 4-pass decomposition pipeline to generate atomic TDD tasks. The spec lives at `docs/specs/api_layer_spec.txt`.
+The REFACTOR stage has been fully implemented in the TDD pipeline (525 tests passing, mypy/ruff clean). The next step is to run the API layer specification through the 4-pass decomposition pipeline to generate atomic TDD tasks. The spec lives at `.ai/research/api_layer_spec.txt`.
 
 ---
 
@@ -46,7 +46,7 @@ The REFACTOR stage has been fully implemented in the TDD pipeline (525 tests pas
 
 ## Next Priorities
 
-1. **Decompose API layer spec**: Run `tdd-orchestrator decompose docs/specs/api_layer_spec.txt` to generate TDD tasks from the API layer specification. Review the generated tasks for correctness and adjust if needed.
+1. **Decompose API layer spec**: Run `tdd-orchestrator decompose .ai/research/api_layer_spec.txt` to generate TDD tasks from the API layer specification. Review the generated tasks for correctness and adjust if needed.
 2. **Follow-up hook (optional)**: Create `.claude/hooks/plan_model_gate.sh` - PreToolUse on `Task`, warns if Plan/architect agents use non-Opus models. This was deferred from the REFACTOR implementation.
 
 ---
@@ -54,10 +54,10 @@ The REFACTOR stage has been fully implemented in the TDD pipeline (525 tests pas
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_2038_implemented-refactor-stage-in-tdd-pipeline.md`
-- **API layer spec**: `docs/specs/api_layer_spec.txt`
-- **API layer plan**: `docs/plans/add-tdd-refactor/REVISED_PLAN.md`
+- **API layer spec**: `.ai/research/api_layer_spec.txt`
+- **API layer plan**: `.ai/plans/add-tdd-refactor/REVISED_PLAN.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

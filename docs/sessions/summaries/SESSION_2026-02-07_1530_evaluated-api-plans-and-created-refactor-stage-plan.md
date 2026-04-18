@@ -39,16 +39,16 @@ Ran a structured 4-round debate (advocate/critic/synthesis/verdict) on all 10 op
 ### Accomplishments
 
 - Ran 10 parallel structured debates using opus subagents (4 rounds each: advocate, critic, synthesis, verdict)
-- Updated `docs/plans/PLAN_PHASE1_API_LAYER.md` with all 10 verdicts and propagated 3 overturned decisions into body sections (code examples, defaults, patterns)
-- Created `docs/specs/api_layer_spec.txt` — full PRD in decomposition pipeline format (12 TDD cycles, 4 phases, 14 FRs, 7 NFRs, module structure, API specification, design constraints)
-- Created `docs/plans/add-tdd-refactor/PLAN.md` — 4-plan, 8-task implementation plan for REFACTOR stage (conditional execution, refactor_checker.py, pipeline integration, ~790 new lines)
+- Updated `.ai/plans/PLAN_PHASE1_API_LAYER.md` with all 10 verdicts and propagated 3 overturned decisions into body sections (code examples, defaults, patterns)
+- Created `.ai/research/api_layer_spec.txt` — full PRD in decomposition pipeline format (12 TDD cycles, 4 phases, 14 FRs, 7 NFRs, module structure, API specification, design constraints)
+- Created `.ai/plans/add-tdd-refactor/PLAN.md` — 4-plan, 8-task implementation plan for REFACTOR stage (conditional execution, refactor_checker.py, pipeline integration, ~790 new lines)
 - Explored decomposition pipeline architecture to confirm greenfield project support
 
 ### Files Modified
 
-- `docs/plans/PLAN_PHASE1_API_LAYER.md` — Added 10 verdict blocks, updated 6 body sections for overturned decisions (69 insertions, 61 deletions)
-- `docs/specs/api_layer_spec.txt` — NEW: PRD for API layer in decomposition format (~480 lines)
-- `docs/plans/add-tdd-refactor/PLAN.md` — NEW: Implementation plan for REFACTOR stage (~530 lines)
+- `.ai/plans/PLAN_PHASE1_API_LAYER.md` — Added 10 verdict blocks, updated 6 body sections for overturned decisions (69 insertions, 61 deletions)
+- `.ai/research/api_layer_spec.txt` — NEW: PRD for API layer in decomposition format (~480 lines)
+- `.ai/plans/add-tdd-refactor/PLAN.md` — NEW: Implementation plan for REFACTOR stage (~530 lines)
 
 ### Git State
 
@@ -68,11 +68,11 @@ None
 
 ## Next Priorities
 
-1. **Review the REFACTOR stage plan** — Read `docs/plans/add-tdd-refactor/PLAN.md` and evaluate the 4-plan, 8-task breakdown. Key areas to scrutinize: conditional execution logic, refactor_checker thresholds, pipeline wiring in worker.py, and whether the RE_VERIFY -> FIX recovery flow after REFACTOR is correct.
+1. **Review the REFACTOR stage plan** — Read `.ai/plans/add-tdd-refactor/PLAN.md` and evaluate the 4-plan, 8-task breakdown. Key areas to scrutinize: conditional execution logic, refactor_checker thresholds, pipeline wiring in worker.py, and whether the RE_VERIFY -> FIX recovery flow after REFACTOR is correct.
 
 2. **Implement the REFACTOR stage** — Execute the 4 plans in sequence (Stage enum -> checker + prompt -> pipeline integration -> tests). Estimated 1-2 sessions.
 
-3. **Run API layer spec through decomposition pipeline** — After REFACTOR stage is live: `python -m tdd_orchestrator.decompose_spec --spec docs/specs/api_layer_spec.txt --prefix API --dry-run` to validate decomposition output before committing to DB.
+3. **Run API layer spec through decomposition pipeline** — After REFACTOR stage is live: `python -m tdd_orchestrator.decompose_spec --spec .ai/research/api_layer_spec.txt --prefix API --dry-run` to validate decomposition output before committing to DB.
 
 ---
 

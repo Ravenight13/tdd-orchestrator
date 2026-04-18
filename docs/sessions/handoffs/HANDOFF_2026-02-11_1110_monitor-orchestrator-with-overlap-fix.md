@@ -55,7 +55,7 @@ Implemented a 3-level defense against overlapping task decomposition that caused
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-11_1110_3-level-overlap-defense.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **New modules**: `src/tdd_orchestrator/decomposition/overlap_detector.py`, `src/tdd_orchestrator/worker_pool/verify_only.py`
 - **Key log messages to watch**: `"pre-implemented"`, `"verify-only"`, `"Overlap detected"`, `"Parallel overlap conflict"`
 

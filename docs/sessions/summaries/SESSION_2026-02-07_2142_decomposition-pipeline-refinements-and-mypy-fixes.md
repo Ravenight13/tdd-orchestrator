@@ -48,7 +48,7 @@ Fixed 5 root causes producing inaccurate task decompositions in the 4-pass LLM p
 - `tests/unit/decomposition/test_prompts.py` (10 tests)
 - `tests/unit/decomposition/test_spec_validator.py` (13 tests)
 - `tests/unit/decomposition/test_decomposer_pass2.py` (3 tests)
-- `docs/plans/decomposition-refinements/PLAN.md`
+- `.ai/plans/decomposition-refinements/PLAN.md`
 
 **Modified files:**
 - `src/tdd_orchestrator/decomposition/decomposer.py` (841 -> 795 lines)
@@ -82,7 +82,7 @@ Fixed 5 root causes producing inaccurate task decompositions in the 4-pass LLM p
 
 ## Next Priorities
 
-1. **Re-decompose the API spec** to validate fixes: `.venv/bin/python -m tdd_orchestrator.decompose_spec --spec docs/specs/api_layer_spec.txt --prefix API --clear --scaffolding-ref -v`
+1. **Re-decompose the API spec** to validate fixes: `.venv/bin/python -m tdd_orchestrator.decompose_spec --spec .ai/research/api_layer_spec.txt --prefix API --clear --scaffolding-ref -v`
 2. **Verify results**: Check that `impl_file` paths no longer contain `src/htmx/`, `depends_on` is populated for phase > 1, and no `src/integration/` impl paths exist
 3. **Split `test_decomposer.py`** (1042 lines) into domain-specific test files
 

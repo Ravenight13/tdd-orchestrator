@@ -70,8 +70,8 @@ Phase 3 (Web Dashboard) is fully complete — P0 and P1 features implemented wit
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-15_0907_added-backend-tests-for-p1-dashboard-endpoints.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
-- **Production Vision**: `docs/PRODUCTION_VISION.md` (Phase 4 is multi-project federation, but these P1 items strengthen single-project first)
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
+- **Production Vision**: `.ai/architecture/PRODUCTION_VISION.md` (Phase 4 is multi-project federation, but these P1 items strengthen single-project first)
 - **WIP**: `.claude/docs/master/WIP.md` (Pipeline Integrity section tracks remaining work)
 
 ---

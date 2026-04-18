@@ -81,7 +81,7 @@ Phase 12 had two blocked integration tasks. This session fixed the root causes (
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-11_1340_fixed-phase12-api-blockers-completed-12-01.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **DB path**: `orchestrator.db` (project root)
 - **Python**: Use `.venv/bin/python`, `.venv/bin/pytest`, etc. (not on PATH)
 

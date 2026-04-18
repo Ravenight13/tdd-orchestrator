@@ -49,12 +49,12 @@ Completed Phase 2 of the pipeline integrity roadmap by implementing verify_comma
 - NEW: `tests/unit/worker_pool/test_done_criteria_checker.py` (138 lines)
 
 **Phase 3 planning** (uncommitted):
-- EDIT: `docs/plans/pipeline-integrity/PHASE3.md` (revised with actual metrics)
-- NEW: `docs/plans/pipeline-integrity/03-00-PLAN.md`
-- NEW: `docs/plans/pipeline-integrity/03-01-PLAN.md`
-- NEW: `docs/plans/pipeline-integrity/03-02-PLAN.md`
-- NEW: `docs/plans/pipeline-integrity/03-03-PLAN.md`
-- NEW: `docs/plans/pipeline-integrity/03-04-PLAN.md`
+- EDIT: `.ai/plans/pipeline-integrity/PHASE3.md` (revised with actual metrics)
+- NEW: `.ai/plans/pipeline-integrity/03-00-PLAN.md`
+- NEW: `.ai/plans/pipeline-integrity/03-01-PLAN.md`
+- NEW: `.ai/plans/pipeline-integrity/03-02-PLAN.md`
+- NEW: `.ai/plans/pipeline-integrity/03-03-PLAN.md`
+- NEW: `.ai/plans/pipeline-integrity/03-04-PLAN.md`
 
 ### Git State
 

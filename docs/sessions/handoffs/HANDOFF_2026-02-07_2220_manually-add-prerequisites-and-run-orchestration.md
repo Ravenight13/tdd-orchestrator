@@ -57,7 +57,7 @@ Phase 0 prerequisite task generation is now built into the decomposition pipelin
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_2220_added-phase0-prerequisite-task-generation.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **New module**: `src/tdd_orchestrator/decomposition/prerequisites.py` - deterministic Phase 0 task generation
 - **Config flag**: `DecompositionConfig.generate_prerequisites` (default True) controls whether prerequisites auto-generate
 

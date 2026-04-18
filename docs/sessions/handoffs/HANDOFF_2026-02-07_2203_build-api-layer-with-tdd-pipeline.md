@@ -84,9 +84,9 @@ The API layer spec has been decomposed into 46 TDD tasks across 12 phases, with 
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_2203_split-test-file-and-redecompose-api-spec.md`
-- **API spec**: `docs/specs/api_layer_spec.txt`
+- **API spec**: `.ai/research/api_layer_spec.txt`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

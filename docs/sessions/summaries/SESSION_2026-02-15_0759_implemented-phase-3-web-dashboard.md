@@ -59,7 +59,7 @@ Implemented the complete Phase 3 Web Dashboard — a React 19 + Vite 6 + Tailwin
 
 **Docs:**
 - `.claude/docs/master/WIP.md` — added Phase 3 section, resolved dashboard hosting question
-- `docs/PRODUCTION_VISION.md` — marked Phase 3 complete, Phase 4 as NEXT
+- `.ai/architecture/PRODUCTION_VISION.md` — marked Phase 3 complete, Phase 4 as NEXT
 - `.claude/docs/master/DECISIONS_ACTIVE.md` — added React stack decision
 - `.gitignore` — added `frontend/node_modules/`, `frontend/dist/`
 - `CLAUDE.md` — added `init-prd` command

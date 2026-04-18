@@ -32,9 +32,9 @@ python -m mypy src/ --strict
 ## Executive Summary
 
 Three planning documents are ready for structured evaluation:
-- **Production Vision** (`docs/PRODUCTION_VISION.md`) — 30 ideas across PRD intake, service deployment, and web dashboard
-- **Architecture Plan** (`docs/plans/PLAN_PRODUCTION_ARCHITECTURE.md`) — 5-phase plan: API Layer -> PRD Pipeline -> Dashboard -> Federation -> Ecosystem
-- **API Layer Detail** (`docs/plans/PLAN_PHASE1_API_LAYER.md`) — 2,092-line implementation plan with 10 open debate questions
+- **Production Vision** (`.ai/architecture/PRODUCTION_VISION.md`) — 30 ideas across PRD intake, service deployment, and web dashboard
+- **Architecture Plan** (`.ai/plans/PLAN_PRODUCTION_ARCHITECTURE.md`) — 5-phase plan: API Layer -> PRD Pipeline -> Dashboard -> Federation -> Ecosystem
+- **API Layer Detail** (`.ai/plans/PLAN_PHASE1_API_LAYER.md`) — 2,092-line implementation plan with 10 open debate questions
 
 The next session should run a **4-round pro/con debate** using `/evaluate` mental models on the 10 open questions before implementation begins.
 
@@ -50,7 +50,7 @@ The next session should run a **4-round pro/con debate** using `/evaluate` menta
 
 ## Next Priorities
 
-1. **Run 4-round structured debate on 10 open questions** — Use `/evaluate` to apply mental models to each question in `docs/plans/PLAN_PHASE1_API_LAYER.md` Section 11. The 10 questions are:
+1. **Run 4-round structured debate on 10 open questions** — Use `/evaluate` to apply mental models to each question in `.ai/plans/PLAN_PHASE1_API_LAYER.md` Section 11. The 10 questions are:
    - Q1: FastAPI as optional vs core dependency
    - Q2: SSE vs WebSocket for real-time events
    - Q3: Separate Pydantic models vs unified domain models
@@ -83,11 +83,11 @@ Apply `/evaluate` mental models: Via Negativa (should we even do this?), Inversi
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_1428_designed-production-architecture-and-api-layer-plans.md`
-- **Production vision**: `docs/PRODUCTION_VISION.md`
-- **Architecture plan**: `docs/plans/PLAN_PRODUCTION_ARCHITECTURE.md`
-- **API layer plan**: `docs/plans/PLAN_PHASE1_API_LAYER.md` (especially Section 11: Open Questions)
+- **Production vision**: `.ai/architecture/PRODUCTION_VISION.md`
+- **Architecture plan**: `.ai/plans/PLAN_PRODUCTION_ARCHITECTURE.md`
+- **API layer plan**: `.ai/plans/PLAN_PHASE1_API_LAYER.md` (especially Section 11: Open Questions)
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

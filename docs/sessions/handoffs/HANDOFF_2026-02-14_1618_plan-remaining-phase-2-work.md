@@ -45,7 +45,7 @@ Phase 2A (project config/init), 2B (PRD ingest), and 2C (CLI auto-discovery) are
 
 ## Next Priorities
 
-1. **Assess Phase 2 remaining scope** -- Review `docs/PRODUCTION_VISION.md` Phase 2 items: PRD-to-PR pipeline (`run-prd` P0), checkpoint & resume (P1), PRD template system (P1). Determine which are ready to build vs. need design.
+1. **Assess Phase 2 remaining scope** -- Review `.ai/architecture/PRODUCTION_VISION.md` Phase 2 items: PRD-to-PR pipeline (`run-prd` P0), checkpoint & resume (P1), PRD template system (P1). Determine which are ready to build vs. need design.
 
 2. **Wire `serve` command to real API** -- The `api/` package has 20 source files (FastAPI app, routes, SSE, middleware, models) and 33 test files. The `cli.py:run_server()` stub needs to delegate to `api.serve`. This may be a quick win or may need Phase 2C auto-discovery integration into the API layer.
 
@@ -56,9 +56,9 @@ Phase 2A (project config/init), 2B (PRD ingest), and 2C (CLI auto-discovery) are
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-14_1618_phase-2c-cli-auto-discovery.md`
-- **Production roadmap**: `docs/PRODUCTION_VISION.md`
+- **Production roadmap**: `.ai/architecture/PRODUCTION_VISION.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Phase 2A commit**: `7379a19 feat(project): add project config system and init command`
 - **Phase 2B commit**: `d1cfd90 feat(ingest): add PRD ingest command`
 - **Phase 2C commit**: `40ad6bb feat(cli): wire all commands to project config auto-discovery`

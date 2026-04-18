@@ -57,7 +57,7 @@ All 9 pre-existing integration test failures are fixed (504 tests passing, mypy/
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_1244_fixed-9-pre-existing-integration-test-failures.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Key change**: `CodeVerifier._resolve_tool()` in `src/tdd_orchestrator/code_verifier.py` resolves venv tool paths via `sys.executable`
 
 ---

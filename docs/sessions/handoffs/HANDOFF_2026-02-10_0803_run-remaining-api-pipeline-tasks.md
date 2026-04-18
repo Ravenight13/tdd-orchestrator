@@ -75,7 +75,7 @@ Sibling test verification is now active in the VERIFY stage and GREEN prompts. T
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-10_0803_sibling-test-verification-verify-green.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **Sibling verification code**: `src/tdd_orchestrator/worker_pool/stage_verifier.py` (lines 98-128)
 - **Sibling prompt discovery**: `src/tdd_orchestrator/prompt_builder.py` (`_discover_sibling_tests()`)
 

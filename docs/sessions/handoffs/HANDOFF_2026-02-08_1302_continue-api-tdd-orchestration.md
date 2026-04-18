@@ -80,7 +80,7 @@ SDK worker test file creation failures are fixed. API-TDD-01-03 now completes su
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-08_1302_fixed-sdk-worker-test-file-creation-failures.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **SDK fixes commit**: `f3c99f9` fix(worker): fix SDK worker intermittent test file creation failures
 
 ---

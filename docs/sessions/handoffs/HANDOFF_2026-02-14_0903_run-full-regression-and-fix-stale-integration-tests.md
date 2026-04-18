@@ -56,10 +56,10 @@ Phase 5 (AC Validation) is complete — 12/13 pipeline integrity gaps are now cl
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-14_0903_phase5-ac-validation-and-integration-tests.md`
-- **Pipeline integrity roadmap**: `docs/plans/pipeline-integrity/ROADMAP.md`
-- **Phase plans**: `docs/plans/pipeline-integrity/PHASE1.md` through `PHASE5.md`
+- **Pipeline integrity roadmap**: `.ai/plans/pipeline-integrity/ROADMAP.md`
+- **Phase plans**: `.ai/plans/pipeline-integrity/PHASE1.md` through `PHASE5.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

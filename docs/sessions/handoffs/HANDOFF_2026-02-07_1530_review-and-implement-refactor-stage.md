@@ -45,7 +45,7 @@ The Phase 1 API layer plan has been fully evaluated (10 design questions debated
 
 ## Next Priorities
 
-1. **Review the REFACTOR stage plan** — Read and critically evaluate `docs/plans/add-tdd-refactor/PLAN.md`. The plan has 4 sub-plans with 8 tasks total:
+1. **Review the REFACTOR stage plan** — Read and critically evaluate `.ai/plans/add-tdd-refactor/PLAN.md`. The plan has 4 sub-plans with 8 tasks total:
 
    | Plan | Tasks | Focus |
    |------|-------|-------|
@@ -66,7 +66,7 @@ The Phase 1 API layer plan has been fully evaluated (10 design questions debated
 3. **Run API layer spec through decomposition** — After REFACTOR is live:
    ```bash
    python -m tdd_orchestrator.decompose_spec \
-       --spec docs/specs/api_layer_spec.txt \
+       --spec .ai/research/api_layer_spec.txt \
        --prefix API \
        --dry-run
    ```
@@ -76,11 +76,11 @@ The Phase 1 API layer plan has been fully evaluated (10 design questions debated
 ## Key Context
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_1530_evaluated-api-plans-and-created-refactor-stage-plan.md`
-- **REFACTOR plan**: `docs/plans/add-tdd-refactor/PLAN.md`
-- **API layer spec**: `docs/specs/api_layer_spec.txt`
-- **API layer plan** (with verdicts): `docs/plans/PLAN_PHASE1_API_LAYER.md`
+- **REFACTOR plan**: `.ai/plans/add-tdd-refactor/PLAN.md`
+- **API layer spec**: `.ai/research/api_layer_spec.txt`
+- **API layer plan** (with verdicts): `.ai/plans/PLAN_PHASE1_API_LAYER.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

@@ -11,7 +11,7 @@
 
 ## Architectural Review Summary
 
-This revision addresses findings from a deep architectural review of the Sonnet-drafted plan at `polished-weaving-koala.md` and the original plan at `docs/plans/add-tdd-refactor/PLAN.md`. Below is each finding, its severity, and the corrective action taken.
+This revision addresses findings from a deep architectural review of the Sonnet-drafted plan at `polished-weaving-koala.md` and the original plan at `.ai/plans/add-tdd-refactor/PLAN.md`. Below is each finding, its severity, and the corrective action taken.
 
 ### Critical Corrections
 

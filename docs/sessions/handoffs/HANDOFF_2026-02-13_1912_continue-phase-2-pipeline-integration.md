@@ -70,7 +70,7 @@ worker.py (426 lines)           pipeline.py (412 lines)
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-13_1912_extracted-tdd-pipeline-from-worker.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 - **New module**: `src/tdd_orchestrator/worker_pool/pipeline.py` -- the extracted pipeline logic
 - **Test patterns**: `tests/unit/worker_pool/test_pipeline.py` -- follows `test_verify_only.py` pattern
 

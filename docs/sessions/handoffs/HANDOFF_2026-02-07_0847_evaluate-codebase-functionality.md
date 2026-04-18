@@ -54,7 +54,7 @@ This session established the GitHub repo, added conventional commit support to c
 
 - **Full session log**: `.claude/docs/summaries/SESSION_2026-02-07_0847_repo-setup-and-best-practices.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 
