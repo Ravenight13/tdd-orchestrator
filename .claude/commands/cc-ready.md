@@ -46,7 +46,7 @@ Initialize this chat as a development session for the TDD Orchestrator project.
 <context>
 Git Status: !`git status --short 2>/dev/null | head -10 || echo "Not a git repo"`
 Recent Commits: !`git log --oneline -5 2>/dev/null || echo "No git history"`
-Recent Handoffs: !`ls -1t .claude/docs/handoffs/HANDOFF_*.md 2>/dev/null | head -3 || echo "No handoffs yet"`
+Recent Handoffs: !`ls -1t .ai/sessions/handoffs/HANDOFF_*.md 2>/dev/null | head -3 || echo "No handoffs yet"`
 Test Status: !`python -m pytest tests/ --tb=no -q 2>/dev/null | tail -3 || echo "Tests not run"`
 </context>
 
@@ -108,7 +108,7 @@ If $ARGUMENTS contains a filename (ends in `.md`, `.txt`, or starts with `@`):
 3. Read the file and extract tasks
 
 If $ARGUMENTS is empty, auto-detect:
-1. Check for recent handoff files in `.claude/docs/handoffs/`
+1. Check for recent handoff files in `.ai/sessions/handoffs/`
 2. Check git log for recent activity
 3. If ambiguous, ask user
 
