@@ -291,7 +291,7 @@ python -m mypy src/ --strict
 
 - **Full session log**: `.claude/docs/summaries/SESSION_{filename_ts}_{session_slug}.md`
 - **CLAUDE.md**: Project conventions and rules
-- **Architecture**: `docs/ARCHITECTURE.md`
+- **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
 ---
 

@@ -12,13 +12,13 @@ Usage:
 Examples:
     # Decompose Salesforce integration spec
     uv run python -m tdd_orchestrator.decompose_spec \
-        --spec .claude/docs/plans/salesforce-integration/app_spec.txt \
+        --spec .claude/.ai/plans/salesforce-integration/app_spec.txt \
         --prefix SF \
         --clear
 
     # Dry-run (parse and decompose only, no DB load)
     uv run python -m tdd_orchestrator.decompose_spec \
-        --spec .claude/docs/plans/salesforce-integration/app_spec.txt \
+        --spec .claude/.ai/plans/salesforce-integration/app_spec.txt \
         --prefix SF \
         --dry-run
 
@@ -31,7 +31,7 @@ Examples:
 
     # Production use (requires `claude login` for subscription auth)
     uv run python -m tdd_orchestrator.decompose_spec \
-        --spec .claude/docs/plans/salesforce-integration/app_spec.txt \
+        --spec .claude/.ai/plans/salesforce-integration/app_spec.txt \
         --prefix SF
 """
 

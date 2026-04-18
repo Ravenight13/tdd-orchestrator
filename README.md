@@ -32,7 +32,7 @@ tdd-orchestrator run --workers 2
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture documentation.
+See [.ai/architecture/ARCHITECTURE.md](.ai/architecture/ARCHITECTURE.md) for detailed architecture documentation.
 
 ## Project Structure
 

@@ -73,7 +73,7 @@ class TestDeriveBranchName:
         assert result.startswith("feat/")
 
     def test_uses_stem_only_for_paths_with_dirs(self) -> None:
-        result = derive_branch_name(Path("docs/plans/user-auth.md"))
+        result = derive_branch_name(Path(".ai/plans/user-auth.md"))
         assert result == "feat/user-auth"
 
     def test_handles_names_with_spaces(self) -> None:
