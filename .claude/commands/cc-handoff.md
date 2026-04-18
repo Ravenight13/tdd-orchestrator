@@ -4,7 +4,7 @@ description: Generates dual-file session handoff (SESSION + HANDOFF) from conver
 argument-hint: "[session-description] [--dry-run]"
 allowed-tools:
   - Read
-  - Write(.claude/docs/**)
+  - Write(.ai/sessions/**)
   - Bash(mkdir -p *)
   - Bash(pwd *)
   - Bash(ls *)
@@ -33,7 +33,7 @@ Analyze conversation context to extract accomplishments and next priorities, the
 1. SESSION file (what happened) named for the accomplishment
 2. HANDOFF file (what's next) named for the next action
 
-SESSION files written to `.claude/docs/summaries/`, HANDOFF files written to `.claude/docs/handoffs/`.
+SESSION files written to `.ai/sessions/summaries/`, HANDOFF files written to `.ai/sessions/handoffs/`.
 
 Run `/cc-handoff` to auto-detect descriptions, or `/cc-handoff "description"` to specify the session milestone.
 </quick_start>
@@ -52,8 +52,8 @@ filename_ts: !`date +%Y-%m-%d_%H%M`
 </project_root>
 
 <session_dirs>
-summaries: .claude/docs/summaries
-handoffs: .claude/docs/handoffs
+summaries: .ai/sessions/summaries
+handoffs: .ai/sessions/handoffs
 </session_dirs>
 
 <project_state>
@@ -113,11 +113,11 @@ Claude's internal clock is unreliable and does not know the user's timezone.
 
 1. Ensure directories exist:
    ```bash
-   mkdir -p ".claude/docs/summaries" ".claude/docs/handoffs"
+   mkdir -p ".ai/sessions/summaries" ".ai/sessions/handoffs"
    ```
 
-2. Write SESSION file to `.claude/docs/summaries/`
-3. Write HANDOFF file to `.claude/docs/handoffs/`
+2. Write SESSION file to `.ai/sessions/summaries/`
+3. Write HANDOFF file to `.ai/sessions/handoffs/`
 
 **If --dry-run flag was set:** Show templates and detected paths but skip file creation.
 </step>
@@ -127,7 +127,7 @@ Claude's internal clock is unreliable and does not know the user's timezone.
 
 1. Stage both files:
    ```bash
-   git add ".claude/docs/summaries/SESSION_{filename_ts}_{session_slug}.md" ".claude/docs/handoffs/HANDOFF_{filename_ts}_{handoff_slug}.md"
+   git add ".ai/sessions/summaries/SESSION_{filename_ts}_{session_slug}.md" ".ai/sessions/handoffs/HANDOFF_{filename_ts}_{handoff_slug}.md"
    ```
 
 2. Also stage any other uncommitted work from this session (check `git status` for modified/new files related to session work). Use your judgement — only include files that were part of this session's work, not unrelated changes.
@@ -160,8 +160,8 @@ Session handoff complete!
 Project: TDD Orchestrator
 
 Files written:
-  SESSION: .claude/docs/summaries/SESSION_{filename_ts}_{session_slug}.md
-  HANDOFF: .claude/docs/handoffs/HANDOFF_{filename_ts}_{handoff_slug}.md
+  SESSION: .ai/sessions/summaries/SESSION_{filename_ts}_{session_slug}.md
+  HANDOFF: .ai/sessions/handoffs/HANDOFF_{filename_ts}_{handoff_slug}.md
 
 Committed: chore(session): {session_slug}
 
@@ -289,7 +289,7 @@ python -m mypy src/ --strict
 
 ## Key Context
 
-- **Full session log**: `.claude/docs/summaries/SESSION_{filename_ts}_{session_slug}.md`
+- **Full session log**: `.ai/sessions/summaries/SESSION_{filename_ts}_{session_slug}.md`
 - **CLAUDE.md**: Project conventions and rules
 - **Architecture**: `.ai/architecture/ARCHITECTURE.md`
 
@@ -320,7 +320,7 @@ Before writing files, verify inputs:
 
 <success_criteria>
 Task is complete when:
-- SESSION file created in `.claude/docs/summaries/`, HANDOFF file created in `.claude/docs/handoffs/`
+- SESSION file created in `.ai/sessions/summaries/`, HANDOFF file created in `.ai/sessions/handoffs/`
 - Filenames use correct timestamp format from `<timestamp>` and semantic slugs
 - SESSION contains comprehensive record (summary, decisions, accomplishments, files modified, git state)
 - HANDOFF contains concise next-step guidance (resume checklist, priorities, context links)
