@@ -44,4 +44,21 @@ frontend/dist/
 
 # OS
 .DS_Store
-.wolf/
+# ── OpenWolf (knowledge tracked so it reaches the other Mac; runtime state not) ──
+# A wholesale `.wolf/` ignore strands anatomy.md and cerebrum.md on one disk.
+# wolf-first-edit-gate.sh requires anatomy.md >= 1024B AND cerebrum.md >= 200B
+# and exits 0 without them, so on any machine the store never reached the gate
+# is silently inert -- the same failure #182/#183 fixed for worktrees.
+# Ignore list mirrors bmcis-dev-config and personal/fantasy-football:
+# knowledge tracked, runtime state not.
+.wolf/daemon.log
+.wolf/dashboard-token
+.wolf/_scan-state.json
+.wolf/cron-state.json
+.wolf/token-ledger.json
+.wolf/*.bak
+.wolf/backups/
+.wolf/archive/
+.wolf/memory-archive/
+.wolf/hooks/_session.json
+.wolf/hooks/node_modules/
